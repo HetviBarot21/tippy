@@ -13,20 +13,20 @@
   - Configure Supabase authentication with custom tenant context
   - _Requirements: 9.1, 9.2, 9.3_
 
-- [ ] 2. Implement core data models and validation
-- [ ] 2.1 Create TypeScript interfaces and Zod schemas for all data models
+- [x] 2. Implement core data models and validation
+- [x] 2.1 Create TypeScript interfaces and Zod schemas for all data models
   - Define Restaurant, Waiter, Tip, QRCode, and Payout interfaces
   - Implement validation schemas for API request/response data
   - Create database query helpers with proper typing
   - _Requirements: 8.1, 8.5, 5.1_
 
-- [ ] 2.2 Implement restaurant and waiter management services
+- [x] 2.2 Implement restaurant and waiter management services
   - Create CRUD operations for restaurants and waiters
   - Implement waiter phone number validation for M-Pesa compatibility
   - Add waiter activation/deactivation functionality
   - _Requirements: 8.1, 8.3, 8.5_
 
-- [ ] 2.3 Write unit tests for data models and validation
+- [x] 2.3 Write unit tests for data models and validation
   - Test all Zod schemas with valid and invalid data
   - Test CRUD operations with proper tenant isolation
   - Verify phone number validation logic
