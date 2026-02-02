@@ -13,64 +13,46 @@
   - Configure Supabase authentication with custom tenant context
   - _Requirements: 9.1, 9.2, 9.3_
 
-- [ ] 2. Implement core data models and validation
-- [ ] 2.1 Create TypeScript interfaces and Zod schemas for all data models
+- [x] 2. Implement core data models and validation
+- [x] 2.1 Create TypeScript interfaces and Zod schemas for all data models
   - Define Restaurant, Waiter, Tip, QRCode, and Payout interfaces
   - Implement validation schemas for API request/response data
   - Create database query helpers with proper typing
   - _Requirements: 8.1, 8.5, 5.1_
 
-- [ ] 2.2 Implement restaurant and waiter management services
+- [x] 2.2 Implement restaurant and waiter management services
   - Create CRUD operations for restaurants and waiters
   - Implement waiter phone number validation for M-Pesa compatibility
   - Add waiter activation/deactivation functionality
   - _Requirements: 8.1, 8.3, 8.5_
 
-- [ ] 2.3 Write unit tests for data models and validation
+- [x] 2.3 Write unit tests for data models and validation
   - Test all Zod schemas with valid and invalid data
   - Test CRUD operations with proper tenant isolation
   - Verify phone number validation logic
   - _Requirements: 8.1, 8.5_
 
 - [x] 3. Build QR code generation and management system
-
-
-
-
-
 - [x] 3.1 Implement QR code generation service
-
-
   - Create unique QR codes for restaurant tables
   - Generate QR data linking to tipping interface with restaurant and table context
   - Implement QR code storage and retrieval from database
   - _Requirements: 8.2, 8.4_
 
 - [x] 3.2 Create QR code management interface for restaurant admins
-
-
   - Build admin interface for generating and managing table QR codes
   - Implement QR code printing functionality with proper formatting
   - Add table number assignment and QR code activation/deactivation
   - _Requirements: 8.2, 8.4_
 
 - [x] 3.3 Add QR code validation and security tests
-
-
   - Test QR code uniqueness and proper data encoding
   - Verify QR codes link to correct restaurant and table
   - Test QR code deactivation and reactivation flows
   - _Requirements: 8.2, 8.4_
 
 - [x] 4. Develop customer-facing tipping interface
-
-
-
-
-
 - [x] 4.1 Create QR code scanning landing page
-
-
   - Build responsive mobile-first tipping interface
   - Display restaurant branding and table information
   - Implement "Tip Waiter" and "Tip Restaurant" selection buttons
@@ -78,8 +60,6 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
 - [x] 4.2 Implement waiter selection interface
-
-
   - Create searchable list of active waiters for the restaurant
   - Display waiter names and profile photos where available
   - Add search functionality for restaurants with many waiters
@@ -87,8 +67,6 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
 - [x] 4.3 Build tip amount entry and confirmation screen
-
-
   - Create amount input with preset buttons (50, 100, 200, 500 KES)
   - Implement custom amount entry with validation (10-10,000 KES range)
   - Add tip summary display with restaurant/waiter information
@@ -96,8 +74,6 @@
   - _Requirements: 3.1, 3.2_
 
 - [x] 4.4 Add end-to-end testing for tipping flow
-
-
   - Test complete customer journey from QR scan to tip confirmation
   - Verify proper waiter selection and amount validation
   - Test responsive design on various mobile devices
