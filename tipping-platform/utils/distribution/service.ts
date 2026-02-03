@@ -4,6 +4,8 @@ import { Tables, TablesInsert, TablesUpdate } from '@/types_db';
 type DistributionGroup = Tables<'distribution_groups'>;
 type DistributionGroupInsert = TablesInsert<'distribution_groups'>;
 type DistributionGroupUpdate = TablesUpdate<'distribution_groups'>;
+type TipDistribution = Tables<'tip_distributions'>;
+type TipDistributionInsert = TablesInsert<'tip_distributions'>;
 
 export interface DistributionGroupConfig {
   id?: string;
@@ -190,6 +192,175 @@ export class DistributionService {
       distributions,
       totalDistributed
     };
+  }
+
+  /**
+   * Create tip distribution records for a restaurant-wide tip
+   */
+  async createTipDistribution(tipId: string, restaurantId: string, netAmount: number): Promise<TipDistribution[]> {
+    try {
+      // Calculate distribution based on current groups
+      const { distributions } = await this.calculateTipDistribution(restaurantId, netAmount);
+
+      // Create distribution records
+      const distributionInserts: TipDistributionInsert[] = distributions.map(dist => ({
+        tip_id: tipId,
+        restaurant_id: restaurantId,
+        group_name: dist.groupName,
+        percentage: dist.percentage,
+        amount: dist.amount
+      }));
+
+      const { data: tipDistributions, error } = await (this.supabase as any)
+        .from('tip_distributions')
+        .insert(distributionInserts)
+        .select();
+
+      if (error) {
+        console.error('Error creating tip distributions:', error);
+        throw new Error('Failed to create tip distributions');
+      }
+
+      console.log(`Created ${tipDistributions.length} tip distributions for tip ${tipId}:`, 
+        tipDistributions.map((d: TipDistribution) => `${d.group_name}: KES ${d.amount}`).join(', '));
+
+      return tipDistributions || [];
+
+    } catch (error) {
+      console.error('Error in createTipDistribution:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get tip distributions for a specific tip
+   */
+  async getTipDistributions(tipId: string): Promise<TipDistribution[]> {
+    const { data, error } = await this.supabase
+      .from('tip_distributions')
+      .select('*')
+      .eq('tip_id', tipId)
+      .order('group_name');
+
+    if (error) {
+      console.error('Error fetching tip distributions:', error);
+      throw new Error('Failed to fetch tip distributions');
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get aggregated distributions for a restaurant within a date range
+   */
+  async getRestaurantDistributionSummary(
+    restaurantId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<Array<{
+    groupName: string;
+    totalAmount: number;
+    tipCount: number;
+  }>> {
+    let query = this.supabase
+      .from('tip_distributions')
+      .select(`
+        group_name,
+        amount,
+        tips!inner(created_at, payment_status)
+      `)
+      .eq('restaurant_id', restaurantId)
+      .eq('tips.payment_status', 'completed');
+
+    if (startDate) {
+      query = query.gte('tips.created_at', startDate);
+    }
+
+    if (endDate) {
+      query = query.lte('tips.created_at', endDate);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching distribution summary:', error);
+      throw new Error('Failed to fetch distribution summary');
+    }
+
+    // Aggregate the results by group
+    const summary = (data || []).reduce((acc: Array<{ groupName: string; totalAmount: number; tipCount: number }>, item: any) => {
+      const existing = acc.find(g => g.groupName === item.group_name);
+      if (existing) {
+        existing.totalAmount += item.amount;
+        existing.tipCount += 1;
+      } else {
+        acc.push({
+          groupName: item.group_name,
+          totalAmount: item.amount,
+          tipCount: 1
+        });
+      }
+      return acc;
+    }, []);
+
+    return summary;
+  }
+
+  /**
+   * Process restaurant-wide tip distribution
+   * This is the main method called when a restaurant tip is completed
+   */
+  async processRestaurantTipDistribution(tip: Tables<'tips'>): Promise<{
+    success: boolean;
+    distributions?: TipDistribution[];
+    error?: string;
+  }> {
+    try {
+      // Only process restaurant-wide tips
+      if (tip.tip_type !== 'restaurant') {
+        return {
+          success: true,
+          distributions: []
+        };
+      }
+
+      // Only process completed payments
+      if (tip.payment_status !== 'completed') {
+        return {
+          success: false,
+          error: 'Tip payment is not completed'
+        };
+      }
+
+      // Check if distributions already exist (avoid duplicates)
+      const existingDistributions = await this.getTipDistributions(tip.id);
+      if (existingDistributions.length > 0) {
+        console.log(`Tip ${tip.id} already has distributions, skipping`);
+        return {
+          success: true,
+          distributions: existingDistributions
+        };
+      }
+
+      // Create distributions based on net amount (after commission)
+      const distributions = await this.createTipDistribution(
+        tip.id,
+        tip.restaurant_id,
+        tip.net_amount
+      );
+
+      return {
+        success: true,
+        distributions
+      };
+
+    } catch (error) {
+      console.error('Error processing restaurant tip distribution:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 }
 

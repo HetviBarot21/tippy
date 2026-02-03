@@ -163,24 +163,110 @@ function CardPaymentForm({
 }
 
 function MPesaPaymentForm({
+  tipType,
+  selectedWaiter,
+  restaurantId,
   amount,
+  tableId,
+  onSuccess,
   onError
-}: {
-  amount: number;
-  onError: (error: string) => void;
-}) {
+}: Omit<PaymentInterfaceProps, 'restaurantName' | 'tableNumber' | 'tableName' | 'onBack'>) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [tipId, setTipId] = useState<string>('');
+  const [statusMessage, setStatusMessage] = useState('');
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsProcessing(true);
+    setStatusMessage('Initiating M-Pesa payment...');
 
-    // M-Pesa integration placeholder
-    setTimeout(() => {
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount,
+          tipType,
+          restaurantId,
+          waiterId: selectedWaiter?.id,
+          tableId,
+          paymentMethod: 'mpesa',
+          customerPhone: phoneNumber
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initiate M-Pesa payment');
+      }
+
+      setTipId(data.tipId);
+      setStatusMessage('STK Push sent to your phone. Please check your phone and enter your M-Pesa PIN.');
+      
+      // Start polling for payment status
+      pollPaymentStatus(data.tipId);
+
+    } catch (error) {
+      console.error('M-Pesa payment error:', error);
+      onError(error instanceof Error ? error.message : 'Failed to initiate M-Pesa payment');
       setIsProcessing(false);
-      onError('M-Pesa integration coming soon');
-    }, 1000);
+    }
+  };
+
+  const pollPaymentStatus = async (tipId: string) => {
+    let attempts = 0;
+    const maxAttempts = 30; // Poll for 5 minutes (30 * 10 seconds)
+    
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/payments/${tipId}/status`);
+        const data = await response.json();
+        
+        if (data.status === 'completed') {
+          setStatusMessage('Payment successful!');
+          onSuccess(data.tipId);
+          return;
+        } else if (data.status === 'failed') {
+          onError('Payment failed. Please try again.');
+          setIsProcessing(false);
+          return;
+        } else if (data.status === 'cancelled') {
+          onError('Payment was cancelled. You can try again.');
+          setIsProcessing(false);
+          return;
+        } else if (data.status === 'timeout') {
+          onError('Payment timed out. Please try again.');
+          setIsProcessing(false);
+          return;
+        }
+        
+        // Continue polling if still processing
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000); // Poll every 10 seconds
+          setStatusMessage(`Waiting for payment confirmation... (${Math.floor(attempts * 10 / 60)}:${(attempts * 10 % 60).toString().padStart(2, '0')})`);
+        } else {
+          onError('Payment verification timed out. Please check your M-Pesa messages or try again.');
+          setIsProcessing(false);
+        }
+      } catch (error) {
+        console.error('Error checking payment status:', error);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 10000);
+        } else {
+          onError('Unable to verify payment status. Please contact support if money was deducted.');
+          setIsProcessing(false);
+        }
+      }
+    };
+    
+    // Start polling after 5 seconds
+    setTimeout(poll, 5000);
   };
 
   return (
@@ -197,13 +283,28 @@ function MPesaPaymentForm({
               id="phone"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="254712345678"
+              placeholder="254712345678 or 0712345678"
               className="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               required
+              disabled={isProcessing}
             />
+            <p className="text-xs text-zinc-500 mt-1">
+              Enter your Safaricom phone number
+            </p>
           </div>
         </div>
       </div>
+
+      {statusMessage && (
+        <div className="bg-blue-900/50 border border-blue-700 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            {isProcessing && (
+              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+            )}
+            <p className="text-blue-200 text-sm">{statusMessage}</p>
+          </div>
+        </div>
+      )}
 
       <button
         type="submit"
@@ -213,7 +314,7 @@ function MPesaPaymentForm({
         {isProcessing ? (
           <div className="flex items-center justify-center space-x-2">
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span>Sending STK Push...</span>
+            <span>Processing...</span>
           </div>
         ) : (
           `Pay ${amount} KES via M-Pesa`
@@ -222,7 +323,7 @@ function MPesaPaymentForm({
 
       <div className="text-center">
         <p className="text-xs text-zinc-500">
-          You will receive an STK push notification on your phone
+          You will receive an STK push notification on your phone. Enter your M-Pesa PIN to complete the payment.
         </p>
       </div>
     </form>
@@ -386,7 +487,12 @@ export default function PaymentInterface(props: PaymentInterfaceProps) {
             </Elements>
           ) : (
             <MPesaPaymentForm
+              tipType={props.tipType}
+              selectedWaiter={props.selectedWaiter}
+              restaurantId={props.restaurantId}
               amount={props.amount}
+              tableId={props.tableId}
+              onSuccess={handlePaymentSuccess}
               onError={handlePaymentError}
             />
           )}

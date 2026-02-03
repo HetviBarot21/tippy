@@ -1,10 +1,10 @@
 import TippingInterface from '@/components/ui/TippingInterface/TippingInterface';
 
-// Mock data for demo
+// Mock data for demo - using real restaurant from database
 const mockRestaurant = {
-  id: 'restaurant-123',
-  name: 'Demo Restaurant',
-  slug: 'demo-restaurant',
+  id: '12345678-1234-4567-8901-123456789012', // Real restaurant ID from database
+  name: 'Mama Mia Italian Restaurant',
+  slug: 'mama-mia-italian',
   email: 'demo@restaurant.com',
   commission_rate: 10.0,
   is_active: true,
@@ -15,36 +15,26 @@ const mockRestaurant = {
 };
 
 const mockTable = {
-  id: 'table-456',
-  number: '5',
-  name: 'Window Table'
+  id: '12345678-1234-4567-8901-123456789014', // Real table ID from database
+  number: '1',
+  name: 'Demo Table'
 };
 
 const mockWaiters = [
   {
-    id: 'waiter-1',
+    id: '12345678-1234-4567-8901-123456789013', // Real waiter IDs from database
     name: 'John Doe',
     profile_photo_url: null
   },
   {
-    id: 'waiter-2',
-    name: 'Jane Smith',
+    id: '12345678-1234-4567-8901-123456789020',
+    name: 'John Kamau',
     profile_photo_url: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face'
   },
   {
-    id: 'waiter-3',
-    name: 'Mike Johnson',
-    profile_photo_url: null
-  },
-  {
-    id: 'waiter-4',
-    name: 'Sarah Wilson',
+    id: '12345678-1234-4567-8901-123456789021',
+    name: 'Mary Wanjiku',
     profile_photo_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
-  },
-  {
-    id: 'waiter-5',
-    name: 'David Brown',
-    profile_photo_url: null
   }
 ];
 

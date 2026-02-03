@@ -79,22 +79,33 @@
   - Test responsive design on various mobile devices
   - _Requirements: 1.1, 2.1, 3.1_
 
-- [ ] 5. Integrate M-Pesa payment processing
-- [ ] 5.1 Set up M-Pesa Daraja API integration
+- [x] 5. Integrate M-Pesa payment processing
+
+
+
+
+- [x] 5.1 Set up M-Pesa Daraja API integration
+
+
+
   - Configure M-Pesa API credentials and authentication
   - Implement STK Push initiation for customer payments
   - Create payment status tracking and webhook handling
   - Add proper error handling for M-Pesa API failures
   - _Requirements: 3.3, 3.4, 3.6_
 
-- [ ] 5.2 Implement payment confirmation and tip recording
+- [x] 5.2 Implement payment confirmation and tip recording
+
+
   - Process M-Pesa payment confirmations via webhooks
   - Calculate and deduct commission amounts from tips
   - Record successful tips in database with proper tenant isolation
   - Send payment confirmation to customers with transaction ID
   - _Requirements: 3.6, 4.4, 4.5_
 
-- [ ] 5.3 Add M-Pesa payment testing and error scenarios
+- [x] 5.3 Add M-Pesa payment testing and error scenarios
+
+
   - Test STK Push with various phone number formats
   - Simulate payment failures and timeout scenarios
   - Verify webhook security and duplicate transaction handling
@@ -164,7 +175,11 @@
   - Test commission rate changes and their application to new tips
   - _Requirements: 4.3, 4.4, 4.5_
 
-- [-] 8. Develop tip distribution system for restaurants
+- [x] 8. Develop tip distribution system for restaurants
+
+
+
+
 
 - [x] 8.1 Create distribution group configuration interface
 
@@ -175,7 +190,9 @@
   - Add distribution group modification with future-only application
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 8.2 Implement restaurant-wide tip distribution logic
+- [x] 8.2 Implement restaurant-wide tip distribution logic
+
+
 
 
   - Calculate tip distributions based on configured group percentages
@@ -184,14 +201,21 @@
   - Track distributed amounts per group for payout processing
   - _Requirements: 5.1, 5.2, 5.4, 5.5_
 
-- [ ] 8.3 Test tip distribution calculations and validation
+- [x] 8.3 Test tip distribution calculations and validation
+
+
   - Test distribution calculations with various percentage configurations
   - Verify percentage validation and sum-to-100 requirement
   - Test distribution changes and their application to future tips only
   - _Requirements: 5.2, 5.4, 5.5_
 
-- [ ] 9. Build restaurant admin dashboard
+- [-] 9. Build restaurant admin dashboard
+
+
+
 - [ ] 9.1 Create tip analytics and reporting interface
+
+
   - Display total tips received for current month with breakdowns
   - Show individual waiter tip totals and restaurant-wide distributions
   - Implement historical data viewing for previous months

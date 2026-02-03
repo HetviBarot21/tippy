@@ -2,10 +2,8 @@ import { stripe } from '@/utils/stripe/config';
 import { createClient } from '@supabase/supabase-js';
 import { Tables, TablesInsert } from '@/types_db';
 import { PaymentValidator, formatValidationErrors } from './validation';
-import { distributionService } from '@/utils/distribution/service';
 import { commissionService } from '@/utils/commission/service';
 
-type TipInsert = TablesInsert<'tips'>;
 type PaymentMethod = 'card' | 'mpesa';
 
 // Use service role client to bypass RLS for testing
@@ -184,39 +182,88 @@ export class PaymentService {
   }
 
   /**
-   * Process M-Pesa payment (placeholder for now)
+   * Process M-Pesa payment using Daraja API
    */
   private async processMPesaPayment(tip: Tables<'tips'>, request: CreateTipRequest): Promise<PaymentResponse> {
-    // TODO: Implement M-Pesa Daraja API integration
-    // For now, return a placeholder response
-    
-    // Normalize phone number for consistency
-    const normalizedPhone = request.customerPhone 
-      ? PaymentValidator.normalizePhoneNumber(request.customerPhone)
-      : null;
-    
-    // Update tip status to processing (would be done after STK push initiation)
-    const supabase = this.getSupabase();
-    const { error } = await (supabase as any)
-      .from('tips')
-      .update({ 
-        payment_status: 'processing',
-        transaction_id: `mpesa_${tip.id}_${Date.now()}`,
-        customer_phone: normalizedPhone
-      })
-      .eq('id', tip.id);
+    try {
+      // Import M-Pesa service dynamically to avoid initialization issues
+      const { mpesaService } = await import('@/utils/mpesa/service');
+      
+      // Normalize phone number for consistency
+      const normalizedPhone = request.customerPhone 
+        ? PaymentValidator.normalizePhoneNumber(request.customerPhone)
+        : null;
 
-    if (error) {
-      console.error('Error updating tip for M-Pesa:', error);
+      if (!normalizedPhone) {
+        throw new Error('Valid phone number is required for M-Pesa payments');
+      }
+
+      console.log('Initiating M-Pesa STK Push:', {
+        tipId: tip.id,
+        amount: request.amount,
+        phone: normalizedPhone
+      });
+
+      // Initiate STK Push
+      const stkPushResponse = await mpesaService.initiateSTKPush({
+        phoneNumber: normalizedPhone,
+        amount: request.amount,
+        accountReference: `TIP-${tip.id}`,
+        transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`
+      });
+
+      console.log('STK Push successful:', stkPushResponse);
+
+      // Update tip with M-Pesa transaction details
+      const supabase = this.getSupabase();
+      const { error } = await (supabase as any)
+        .from('tips')
+        .update({ 
+          payment_status: 'processing',
+          transaction_id: stkPushResponse.CheckoutRequestID,
+          customer_phone: normalizedPhone,
+          metadata: {
+            merchantRequestId: stkPushResponse.MerchantRequestID,
+            checkoutRequestId: stkPushResponse.CheckoutRequestID,
+            stkPushInitiated: new Date().toISOString()
+          }
+        })
+        .eq('id', tip.id);
+
+      if (error) {
+        console.error('Error updating tip for M-Pesa:', error);
+      }
+
+      return {
+        success: true,
+        tipId: tip.id,
+        paymentMethod: 'mpesa',
+        message: stkPushResponse.CustomerMessage || 'STK Push sent to your phone',
+        stkPushId: stkPushResponse.CheckoutRequestID
+      };
+
+    } catch (error) {
+      console.error('M-Pesa payment error:', error);
+      
+      // Update tip status to failed
+      const supabase = this.getSupabase();
+      const { error: updateError } = await (supabase as any)
+        .from('tips')
+        .update({ 
+          payment_status: 'failed',
+          metadata: {
+            error: error instanceof Error ? error.message : 'M-Pesa payment failed',
+            failedAt: new Date().toISOString()
+          }
+        })
+        .eq('id', tip.id);
+
+      if (updateError) {
+        console.error('Error updating tip status to failed:', updateError);
+      }
+
+      throw new Error(error instanceof Error ? error.message : 'M-Pesa payment failed');
     }
-
-    return {
-      success: true,
-      tipId: tip.id,
-      paymentMethod: 'mpesa',
-      message: 'M-Pesa integration coming soon',
-      stkPushId: `stk_${tip.id}_${Date.now()}`
-    };
   }
 
   /**
@@ -295,6 +342,87 @@ export class PaymentService {
     }
 
     return tip;
+  }
+
+  /**
+   * Query M-Pesa payment status
+   */
+  async queryMPesaPaymentStatus(tipId: string): Promise<{
+    success: boolean;
+    status: string;
+    message: string;
+  }> {
+    try {
+      const tip = await this.getTipById(tipId);
+      if (!tip) {
+        return {
+          success: false,
+          status: 'not_found',
+          message: 'Tip not found'
+        };
+      }
+
+      if (tip.payment_method !== 'mpesa') {
+        return {
+          success: false,
+          status: 'invalid_method',
+          message: 'Tip is not an M-Pesa payment'
+        };
+      }
+
+      const currentStatus = tip.payment_status || 'pending';
+
+      // If payment is already completed or failed, return current status
+      if (['completed', 'failed', 'cancelled', 'timeout'].includes(currentStatus)) {
+        return {
+          success: true,
+          status: currentStatus,
+          message: `Payment is ${currentStatus}`
+        };
+      }
+
+      // Query M-Pesa API for pending payments
+      if (tip.transaction_id && currentStatus === 'processing') {
+        try {
+          const { mpesaService } = await import('@/utils/mpesa/service');
+          const queryResponse = await mpesaService.querySTKPushStatus(tip.transaction_id);
+          
+          const status = mpesaService.parseTransactionStatus(parseInt(queryResponse.ResultCode));
+          
+          // Update tip status based on query result
+          if (status !== 'processing' && ['completed', 'failed', 'cancelled'].includes(status)) {
+            await this.updateTipStatus(tipId, status as 'completed' | 'failed' | 'cancelled');
+          }
+
+          return {
+            success: true,
+            status: status,
+            message: queryResponse.ResultDesc || `Payment is ${status}`
+          };
+        } catch (queryError) {
+          console.error('Error querying M-Pesa status:', queryError);
+          return {
+            success: true,
+            status: currentStatus,
+            message: 'Unable to query payment status, please check later'
+          };
+        }
+      }
+
+      return {
+        success: true,
+        status: currentStatus,
+        message: `Payment is ${currentStatus}`
+      };
+
+    } catch (error) {
+      console.error('Error querying M-Pesa payment status:', error);
+      return {
+        success: false,
+        status: 'error',
+        message: 'Failed to query payment status'
+      };
+    }
   }
 
   /**

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { stripe } from '@/utils/stripe/config';
 import { paymentService } from '@/utils/payments/service';
+import { distributionService } from '@/utils/distribution/service';
 
 const relevantEvents = new Set([
   'payment_intent.succeeded',
@@ -56,6 +57,25 @@ export async function POST(request: NextRequest) {
 
         await paymentService.updateTipStatus(tipId, 'completed', paymentIntent.id);
         console.log(`✅ Tip ${tipId} payment completed successfully`);
+
+        // Process tip distribution for restaurant-wide tips
+        try {
+          const tip = await paymentService.getTipById(tipId);
+          if (tip) {
+            const distributionResult = await distributionService.processRestaurantTipDistribution(tip);
+            
+            if (distributionResult.success && distributionResult.distributions && distributionResult.distributions.length > 0) {
+              console.log(`Tip ${tipId} distributed among ${distributionResult.distributions.length} groups:`,
+                distributionResult.distributions.map(d => `${d.group_name}: KES ${d.amount}`).join(', '));
+            } else if (!distributionResult.success) {
+              console.error('Error processing tip distribution:', distributionResult.error);
+            }
+          }
+        } catch (distributionError) {
+          console.error('Error processing tip distribution:', distributionError);
+          // Don't fail the webhook for distribution errors
+        }
+        
         break;
       }
 
