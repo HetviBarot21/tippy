@@ -100,50 +100,75 @@
   - Verify webhook security and duplicate transaction handling
   - _Requirements: 3.3, 3.4, 3.6_
 
-- [ ] 6. Add card payment gateway integration
-- [ ] 6.1 Integrate Stripe or Flutterwave for card payments
+- [x] 6. Add card payment gateway integration
+
+
+
+
+
+- [x] 6.1 Integrate Stripe or Flutterwave for card payments
+
+
   - Set up card payment gateway with proper security compliance
   - Implement payment form with card details collection
   - Add 3D Secure authentication for enhanced security
   - Create payment success and failure handling flows
   - _Requirements: 3.3, 3.5, 3.6_
 
-- [ ] 6.2 Unify payment processing for both M-Pesa and cards
+- [x] 6.2 Unify payment processing for both M-Pesa and cards
+
+
   - Create unified payment service handling both payment methods
   - Implement consistent commission calculation across payment types
   - Add payment method selection and validation logic
   - Ensure proper transaction recording for all payment types
   - _Requirements: 3.3, 4.4, 4.5_
 
-- [ ] 6.3 Test card payment integration and security
+- [x] 6.3 Test card payment integration and security
+
+
   - Test card payments with various card types and scenarios
   - Verify PCI compliance and secure card data handling
   - Test payment gateway webhook processing and error handling
   - _Requirements: 3.3, 3.5, 3.6_
 
-- [ ] 7. Build commission management system
-- [ ] 7.1 Implement configurable commission rates
+- [x] 7. Build commission management system
+
+
+
+
+
+- [x] 7.1 Implement configurable commission rates
+
+
   - Create commission rate management for YourappsLtd admin
   - Set default 10% commission rate with ability to customize per restaurant
   - Implement commission calculation with proper decimal precision
   - Add commission rate change history and audit logging
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 7.2 Create commission tracking and reporting
+- [x] 7.2 Create commission tracking and reporting
+
+
   - Build commission analytics dashboard for YourappsLtd
   - Track total commissions earned per restaurant and time period
   - Implement commission reconciliation and reporting features
   - Add commission payout tracking to YourappsLtd accounts
   - _Requirements: 4.4, 4.5_
 
-- [ ] 7.3 Test commission calculations and edge cases
+- [x] 7.3 Test commission calculations and edge cases
+
+
   - Test commission calculations with various tip amounts and rates
   - Verify proper rounding and decimal precision handling
   - Test commission rate changes and their application to new tips
   - _Requirements: 4.3, 4.4, 4.5_
 
-- [ ] 8. Develop tip distribution system for restaurants
-- [ ] 8.1 Create distribution group configuration interface
+- [-] 8. Develop tip distribution system for restaurants
+
+- [x] 8.1 Create distribution group configuration interface
+
+
   - Build admin interface for setting up distribution groups (cleaners, waiters, admin, owners)
   - Implement percentage allocation with validation (must sum to 100%)
   - Set default distribution percentages as specified in requirements
@@ -151,6 +176,8 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
 - [ ] 8.2 Implement restaurant-wide tip distribution logic
+
+
   - Calculate tip distributions based on configured group percentages
   - Handle restaurant-wide tips and allocate to appropriate groups
   - Implement distribution calculation with proper decimal handling

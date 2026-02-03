@@ -6,6 +6,7 @@ import TipTypeSelection from './TipTypeSelection';
 import WaiterSelection from './WaiterSelection';
 import AmountEntry from './AmountEntry';
 import TipConfirmation from './TipConfirmation';
+import PaymentInterface from './PaymentInterface';
 import LoadingSpinner from '../LoadingSpinner/LoadingSpinner';
 
 type Restaurant = Tables<'restaurants'>;
@@ -23,13 +24,14 @@ interface TippingInterfaceProps {
   waiters: Waiter[];
 }
 
-type TipStep = 'loading' | 'tip-type' | 'waiter-selection' | 'amount-entry' | 'confirmation' | 'payment';
+type TipStep = 'loading' | 'tip-type' | 'waiter-selection' | 'amount-entry' | 'confirmation' | 'payment' | 'success';
 
 export default function TippingInterface({ restaurant, table, waiters }: TippingInterfaceProps) {
   const [currentStep, setCurrentStep] = useState<TipStep>('tip-type');
   const [tipType, setTipType] = useState<'waiter' | 'restaurant' | null>(null);
   const [selectedWaiter, setSelectedWaiter] = useState<Waiter | null>(null);
   const [tipAmount, setTipAmount] = useState<number>(0);
+  const [transactionId, setTransactionId] = useState<string>('');
 
   const handleTipTypeSelect = (type: 'waiter' | 'restaurant') => {
     setTipType(type);
@@ -56,6 +58,17 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
 
   const handleEditAmount = () => {
     setCurrentStep('amount-entry');
+  };
+
+  const handlePaymentSuccess = (txId: string) => {
+    setTransactionId(txId);
+    setCurrentStep('success');
+  };
+
+  const handlePaymentError = (error: string) => {
+    console.error('Payment error:', error);
+    // Could show error state or go back to confirmation
+    setCurrentStep('confirmation');
   };
 
   const handleBack = () => {
@@ -151,9 +164,47 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
         )}
 
         {currentStep === 'payment' && (
-          <div className="text-center text-white">
-            <h2 className="text-xl font-semibold mb-4">Payment Processing</h2>
-            <p className="text-zinc-400">Payment integration coming soon...</p>
+          <PaymentInterface
+            tipType={tipType!}
+            selectedWaiter={selectedWaiter}
+            restaurantId={restaurant.id}
+            restaurantName={restaurant.name}
+            amount={tipAmount}
+            tableId={table.id}
+            tableNumber={table.number}
+            tableName={table.name}
+            onSuccess={handlePaymentSuccess}
+            onError={handlePaymentError}
+            onBack={() => setCurrentStep('confirmation')}
+          />
+        )}
+
+        {currentStep === 'success' && (
+          <div className="text-center space-y-6">
+            <div className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center mx-auto">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Thank You!</h2>
+              <p className="text-zinc-400 mb-4">Your tip has been sent successfully</p>
+              {transactionId && (
+                <p className="text-sm text-zinc-500">Transaction ID: {transactionId}</p>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setCurrentStep('tip-type');
+                setTipType(null);
+                setSelectedWaiter(null);
+                setTipAmount(0);
+                setTransactionId('');
+              }}
+              className="bg-white text-zinc-900 font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:bg-zinc-100"
+            >
+              Send Another Tip
+            </button>
           </div>
         )}
       </div>
