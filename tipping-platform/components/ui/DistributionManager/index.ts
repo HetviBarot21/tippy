@@ -1,0 +1,1 @@
+export { default as DistributionGroupManager } from './DistributionGroupManager';
