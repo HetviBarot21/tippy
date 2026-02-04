@@ -60,7 +60,15 @@ describe('M-Pesa Webhook', () => {
         }
       };
 
-      const invalidCallbacks = [
+      const invalidCallbacks: Array<{
+        Body: {
+          stkCallback?: {
+            MerchantRequestID?: string;
+            CheckoutRequestID?: string;
+            [key: string]: any;
+          } | null;
+        } | null;
+      }> = [
         { Body: null },
         { Body: {} },
         { Body: { stkCallback: null } },
