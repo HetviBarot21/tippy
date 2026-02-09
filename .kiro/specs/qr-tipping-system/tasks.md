@@ -196,22 +196,22 @@
   - Test admin user flows and interface usability
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 10. Implement automated monthly payout system
-- [ ] 10.1 Create payout calculation service
+- [-] 10. Implement automated monthly payout system
+- [x] 10.1 Create payout calculation service
   - Implement monthly payout calculation for waiters and distribution groups
   - Calculate accumulated tips minus commissions for payout amounts
   - Apply minimum payout threshold (100 KES) and handle below-threshold amounts
   - Generate payout records with proper tenant isolation
   - _Requirements: 7.1, 7.6_
 
-- [ ] 10.2 Integrate M-Pesa bulk payments for waiter payouts
+- [x] 10.2 Integrate M-Pesa bulk payments for waiter payouts
   - Set up M-Pesa bulk payment API for individual waiter payouts
   - Implement payout notification system 3 days before transfer
   - Add payout status tracking and transaction ID recording
   - Handle payout failures and retry mechanisms
   - _Requirements: 7.2, 7.3, 7.5_
 
-- [ ] 10.3 Add bank transfer integration for restaurant group payouts
+- [x] 10.3 Add bank transfer integration for restaurant group payouts
   - Integrate bank transfer API for distribution group payouts
   - Implement secure bank account management for restaurants
   - Add payout reconciliation and confirmation tracking

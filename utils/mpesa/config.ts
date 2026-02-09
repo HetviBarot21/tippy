@@ -13,6 +13,9 @@ export interface MpesaConfig {
   environment: 'sandbox' | 'production';
   callbackUrl: string;
   timeoutUrl: string;
+  b2cShortCode?: string;
+  b2cInitiatorName?: string;
+  b2cSecurityCredential?: string;
 }
 
 export interface MpesaCredentials {
@@ -55,17 +58,39 @@ export interface MpesaCallbackData {
   };
 }
 
+export interface MpesaB2CRequest {
+  InitiatorName: string;
+  SecurityCredential: string;
+  CommandID: string;
+  Amount: number;
+  PartyA: string;
+  PartyB: string;
+  Remarks: string;
+  QueueTimeOutURL: string;
+  ResultURL: string;
+  Occasion?: string;
+}
+
+export interface MpesaB2CResponse {
+  ConversationID: string;
+  OriginatorConversationID: string;
+  ResponseCode: string;
+  ResponseDescription: string;
+}
+
 // M-Pesa API URLs
 const MPESA_URLS = {
   sandbox: {
     auth: 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
     stkPush: 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-    stkQuery: 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query'
+    stkQuery: 'https://sandbox.safaricom.co.ke/mpesa/stkpushquery/v1/query',
+    b2c: 'https://sandbox.safaricom.co.ke/mpesa/b2c/v1/paymentrequest'
   },
   production: {
     auth: 'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
     stkPush: 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-    stkQuery: 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query'
+    stkQuery: 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query',
+    b2c: 'https://api.safaricom.co.ke/mpesa/b2c/v1/paymentrequest'
   }
 };
 
@@ -79,7 +104,10 @@ export function getMpesaConfig(): MpesaConfig {
     passkey: process.env.MPESA_PASSKEY || '',
     environment,
     callbackUrl: process.env.MPESA_CALLBACK_URL || `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/mpesa`,
-    timeoutUrl: process.env.MPESA_TIMEOUT_URL || `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/mpesa/timeout`
+    timeoutUrl: process.env.MPESA_TIMEOUT_URL || `${process.env.NEXT_PUBLIC_SITE_URL}/api/webhooks/mpesa/timeout`,
+    b2cShortCode: process.env.MPESA_B2C_SHORT_CODE || process.env.MPESA_BUSINESS_SHORT_CODE || '',
+    b2cInitiatorName: process.env.MPESA_B2C_INITIATOR_NAME || 'testapi',
+    b2cSecurityCredential: process.env.MPESA_B2C_SECURITY_CREDENTIAL || ''
   };
 }
 
