@@ -182,13 +182,10 @@ export class PaymentService {
   }
 
   /**
-   * Process M-Pesa payment using Daraja API
+   * Process M-Pesa payment using PesaWise or Daraja API
    */
   private async processMPesaPayment(tip: Tables<'tips'>, request: CreateTipRequest): Promise<PaymentResponse> {
     try {
-      // Import M-Pesa service dynamically to avoid initialization issues
-      const { mpesaService } = await import('@/utils/mpesa/service');
-      
       // Normalize phone number for consistency
       const normalizedPhone = request.customerPhone 
         ? PaymentValidator.normalizePhoneNumber(request.customerPhone)
@@ -198,13 +195,71 @@ export class PaymentService {
         throw new Error('Valid phone number is required for M-Pesa payments');
       }
 
-      console.log('Initiating M-Pesa STK Push:', {
+      console.log('Initiating M-Pesa payment:', {
         tipId: tip.id,
         amount: request.amount,
         phone: normalizedPhone
       });
 
-      // Initiate STK Push
+      // Try PesaWise first, fallback to Daraja if needed
+      const usePesaWise = process.env.MPESA_PROVIDER === 'pesawise' || process.env.PESAWISE_API_KEY;
+
+      if (usePesaWise) {
+        try {
+          // Use PesaWise
+          const { pesaWiseService } = await import('@/utils/pesawise/service');
+          
+          const stkPushResponse = await pesaWiseService.initiateSTKPush({
+            phoneNumber: normalizedPhone,
+            amount: request.amount,
+            accountReference: `TIP-${tip.id}`,
+            transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`
+          });
+
+          if (!stkPushResponse.success || !stkPushResponse.data) {
+            throw new Error(stkPushResponse.error || 'PesaWise STK Push failed');
+          }
+
+          console.log('PesaWise STK Push successful:', stkPushResponse);
+
+          // Update tip with PesaWise transaction details
+          const supabase = this.getSupabase();
+          const { error } = await (supabase as any)
+            .from('tips')
+            .update({ 
+              payment_status: 'processing',
+              transaction_id: stkPushResponse.data.checkout_request_id,
+              customer_phone: normalizedPhone,
+              metadata: {
+                merchantRequestId: stkPushResponse.data.merchant_request_id,
+                checkoutRequestId: stkPushResponse.data.checkout_request_id,
+                stkPushInitiated: new Date().toISOString(),
+                provider: 'pesawise'
+              }
+            })
+            .eq('id', tip.id);
+
+          if (error) {
+            console.error('Error updating tip for PesaWise:', error);
+          }
+
+          return {
+            success: true,
+            tipId: tip.id,
+            paymentMethod: 'mpesa',
+            message: stkPushResponse.data.customer_message || 'STK Push sent to your phone',
+            stkPushId: stkPushResponse.data.checkout_request_id
+          };
+
+        } catch (pesaWiseError) {
+          console.error('PesaWise payment failed, falling back to Daraja:', pesaWiseError);
+          // Continue to Daraja fallback
+        }
+      }
+
+      // Fallback to Daraja API
+      const { mpesaService } = await import('@/utils/mpesa/service');
+      
       const stkPushResponse = await mpesaService.initiateSTKPush({
         phoneNumber: normalizedPhone,
         amount: request.amount,
@@ -212,7 +267,7 @@ export class PaymentService {
         transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`
       });
 
-      console.log('STK Push successful:', stkPushResponse);
+      console.log('Daraja STK Push successful:', stkPushResponse);
 
       // Update tip with M-Pesa transaction details
       const supabase = this.getSupabase();
@@ -225,7 +280,8 @@ export class PaymentService {
           metadata: {
             merchantRequestId: stkPushResponse.MerchantRequestID,
             checkoutRequestId: stkPushResponse.CheckoutRequestID,
-            stkPushInitiated: new Date().toISOString()
+            stkPushInitiated: new Date().toISOString(),
+            provider: 'daraja'
           }
         })
         .eq('id', tip.id);
