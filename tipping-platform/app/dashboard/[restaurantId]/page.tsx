@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
-import { QRCodeManager } from '@/components/ui/QRCodeManager';
 import { DistributionGroupManager } from '@/components/ui/DistributionManager';
+import { TipAnalyticsDashboard } from '@/components/ui/Analytics/TipAnalyticsDashboard';
+import { WaiterManagementDashboard } from '@/components/ui/WaiterManagement/WaiterManagementDashboard';
+import { EnhancedQRCodeManager } from '@/components/ui/QRCodeManager/EnhancedQRCodeManager';
 
 interface Props {
   params: {
@@ -47,10 +49,20 @@ export default async function RestaurantDashboard({ params }: Props) {
 
         {/* Dashboard Sections */}
         <div className="space-y-8">
+          {/* Tip Analytics */}
+          <section>
+            <TipAnalyticsDashboard restaurantId={params.restaurantId} />
+          </section>
+
+          {/* Waiter Management */}
+          <section>
+            <WaiterManagementDashboard restaurantId={params.restaurantId} />
+          </section>
+
           {/* QR Code Management */}
           <section>
             <h2 className="text-2xl font-semibold mb-4">QR Code Management</h2>
-            <QRCodeManager 
+            <EnhancedQRCodeManager 
               restaurantId={params.restaurantId}
               restaurantName={restaurant.name}
             />
