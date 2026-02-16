@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { calculateMonthlyPayouts, generatePayoutRecords } from '@/utils/payouts/service';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/admin';
 
 describe('Payout Calculation Service', () => {
   const testRestaurantId = 'test-restaurant-id';
@@ -21,6 +21,7 @@ describe('Payout Calculation Service', () => {
       id: testRestaurantId,
       name: 'Test Restaurant',
       slug: 'test-restaurant',
+      email: 'test@restaurant.com',
       commission_rate: 10.00
     });
 
@@ -89,6 +90,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 100.00,
         net_amount: 900.00,
         tip_type: 'waiter',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-15T10:00:00Z'
       },
@@ -99,6 +101,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 50.00,
         net_amount: 450.00,
         tip_type: 'waiter',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-20T10:00:00Z'
       },
@@ -109,6 +112,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 20.00,
         net_amount: 180.00,
         tip_type: 'waiter',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-25T10:00:00Z'
       }
@@ -156,6 +160,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 200.00,
         net_amount: 1800.00,
         tip_type: 'restaurant',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-15T10:00:00Z'
       },
@@ -166,6 +171,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 100.00,
         net_amount: 900.00,
         tip_type: 'restaurant',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-20T10:00:00Z'
       }
@@ -211,6 +217,7 @@ describe('Payout Calculation Service', () => {
       commission_amount: 5.00,
       net_amount: 45.00,
       tip_type: 'waiter',
+      payment_method: 'mpesa',
       payment_status: 'completed',
       created_at: '2024-01-15T10:00:00Z'
     });
@@ -243,6 +250,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 100.00,
         net_amount: 900.00,
         tip_type: 'waiter',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-15T10:00:00Z'
       },
@@ -253,6 +261,7 @@ describe('Payout Calculation Service', () => {
         commission_amount: 200.00,
         net_amount: 1800.00,
         tip_type: 'restaurant',
+        payment_method: 'mpesa',
         payment_status: 'completed',
         created_at: '2024-01-20T10:00:00Z'
       }

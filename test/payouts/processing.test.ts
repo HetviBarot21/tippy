@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { processMpesaPayouts, retryFailedPayouts, sendPayoutNotifications } from '@/utils/payouts/processor';
 import { processBankTransfers } from '@/utils/bank-transfers/service';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/admin';
 
 // Mock M-Pesa client
 vi.mock('@/utils/mpesa/client', () => ({
@@ -28,7 +28,8 @@ describe('Payout Processing Service', () => {
     await supabase.from('restaurants').insert({
       id: testRestaurantId,
       name: 'Test Restaurant',
-      slug: 'test-restaurant'
+      slug: 'test-restaurant',
+      email: 'test@restaurant.com'
     });
 
     // Create test waiters

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/admin';
 
 describe('Payout API Endpoints', () => {
   const testRestaurantId = 'test-restaurant-id';
@@ -18,7 +18,8 @@ describe('Payout API Endpoints', () => {
     await supabase.from('restaurants').insert({
       id: testRestaurantId,
       name: 'Test Restaurant',
-      slug: 'test-restaurant'
+      slug: 'test-restaurant',
+      email: 'test@restaurant.com'
     });
 
     // Create test waiter
@@ -77,6 +78,7 @@ describe('Payout API Endpoints', () => {
           commission_amount: 100.00,
           net_amount: 900.00,
           tip_type: 'waiter',
+          payment_method: 'mpesa',
           payment_status: 'completed',
           created_at: '2024-01-15T10:00:00Z'
         },
@@ -87,6 +89,7 @@ describe('Payout API Endpoints', () => {
           commission_amount: 200.00,
           net_amount: 1800.00,
           tip_type: 'restaurant',
+          payment_method: 'mpesa',
           payment_status: 'completed',
           created_at: '2024-01-20T10:00:00Z'
         }
@@ -123,4 +126,33 @@ describe('Payout API Endpoints', () => {
         commission_amount: 100.00,
         net_amount: 900.00,
         tip_type: 'waiter',
-        payment_status: 
+        payment_method: 'mpesa',
+        payment_status: 'completed'
+      });
+
+      const response = await fetch('/api/payouts/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurant_id: testRestaurantId,
+          month: '2024-01',
+          generate: true
+        })
+      });
+
+      expect(response.ok).toBe(true);
+      
+      const data = await response.json();
+      expect(data.payouts_generated).toBe(true);
+      
+      // Verify payout records were created
+      const { data: payouts } = await supabase
+        .from('payouts')
+        .select('*')
+        .eq('restaurant_id', testRestaurantId);
+      
+      expect(payouts).toBeDefined();
+      expect(payouts!.length).toBeGreaterThan(0);
+    });
+  });
+}); 
