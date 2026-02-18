@@ -6,7 +6,7 @@ import { createClient } from '@/utils/supabase/server';
 import { Tables } from '@/types_db';
 import { payoutService } from './service';
 import { payoutNotificationService } from './notifications';
-import { mpesaBulkPaymentService, BulkPayoutRequest } from '@/utils/mpesa/bulk-payments';
+import { pesaWiseBulkPaymentService, BulkPaymentRecipient } from '@/utils/pesawise/bulk-payments';
 
 type Payout = Tables<'payouts'>;
 
@@ -35,7 +35,7 @@ export class PayoutProcessor {
   private supabase = createClient();
 
   /**
-   * Process pending waiter payouts using M-Pesa bulk payments
+   * Process pending waiter payouts using PesaWise bulk payments
    */
   async processWaiterPayouts(payouts: Payout[], dryRun = false): Promise<{
     success: boolean;
@@ -58,7 +58,7 @@ export class PayoutProcessor {
       };
     }
 
-    console.log(`Processing ${waiterPayouts.length} waiter payouts...`);
+    console.log(`Processing ${waiterPayouts.length} waiter payouts via PesaWise...`);
 
     // Get waiter details for payouts
     const waiterIds = waiterPayouts.map(p => p.waiter_id).filter(Boolean) as string[];
@@ -71,20 +71,18 @@ export class PayoutProcessor {
       throw new Error('Failed to fetch waiter details');
     }
 
-    // Prepare bulk payout requests
-    const bulkPayoutRequests: BulkPayoutRequest[] = waiterPayouts.map(payout => {
+    // Prepare bulk payout recipients
+    const recipients: BulkPaymentRecipient[] = waiterPayouts.map(payout => {
       const waiter = waiters?.find(w => w.id === payout.waiter_id);
       if (!waiter) {
         throw new Error(`Waiter not found for payout ${payout.id}`);
       }
 
       return {
-        waiter_id: payout.waiter_id!,
-        waiter_name: waiter.name,
-        phone_number: waiter.phone_number,
+        phoneNumber: waiter.phone_number,
         amount: payout.amount,
-        payout_id: payout.id,
-        reference: `PAYOUT-${payout.id.slice(-8)}`
+        reference: `PAYOUT-${payout.id.slice(-8)}`,
+        name: waiter.name
       };
     });
 
@@ -92,31 +90,28 @@ export class PayoutProcessor {
     const errors: string[] = [];
 
     if (dryRun) {
-      console.log('DRY RUN: Simulating M-Pesa bulk payments...');
+      console.log('DRY RUN: Simulating PesaWise bulk payments...');
       // Simulate successful processing for dry run
       bulkResult = {
         success: true,
-        total_payouts: bulkPayoutRequests.length,
-        successful_payouts: bulkPayoutRequests.length,
-        failed_payouts: 0,
-        total_amount: bulkPayoutRequests.reduce((sum, req) => sum + req.amount, 0),
-        results: bulkPayoutRequests.map(req => ({
+        message: 'Dry run completed',
+        totalAmount: recipients.reduce((sum, r) => sum + r.amount, 0),
+        totalRecipients: recipients.length,
+        results: recipients.map((r, idx) => ({
+          phoneNumber: r.phoneNumber,
+          amount: r.amount,
+          reference: r.reference,
           success: true,
-          payout_id: req.payout_id,
-          waiter_name: req.waiter_name,
-          amount: req.amount,
-          conversation_id: `DRY-RUN-${Date.now()}`,
-          originator_conversation_id: `DRY-RUN-ORIG-${Date.now()}`
-        })),
-        errors: []
+          transactionId: `DRY-RUN-${Date.now()}-${idx}`
+        }))
       };
     } else {
-      // Process actual M-Pesa bulk payments
+      // Process actual PesaWise bulk payments
       try {
-        bulkResult = await mpesaBulkPaymentService.processBulkPayouts(bulkPayoutRequests);
+        bulkResult = await pesaWiseBulkPaymentService.processBulkPayments({ recipients });
       } catch (error) {
-        console.error('M-Pesa bulk payment processing failed:', error);
-        errors.push(`M-Pesa bulk payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('PesaWise bulk payment processing failed:', error);
+        errors.push(`PesaWise bulk payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         
         // Return failure result
         return {
@@ -130,53 +125,58 @@ export class PayoutProcessor {
       }
     }
 
-    // Update payout statuses based on M-Pesa results
-    for (const result of bulkResult.results) {
-      try {
-        if (result.success) {
-          // Update payout status to processing with transaction reference
-          await payoutService.updatePayoutStatus(
-            result.payout_id,
-            'processing',
-            result.conversation_id
-          );
+    // Update payout statuses based on PesaWise results
+    let successCount = 0;
+    let failCount = 0;
 
-          // Send processed notification
-          const payout = waiterPayouts.find(p => p.id === result.payout_id);
-          if (payout) {
+    if (bulkResult.results) {
+      for (let i = 0; i < bulkResult.results.length; i++) {
+        const result = bulkResult.results[i];
+        const payout = waiterPayouts[i];
+
+        try {
+          if (result.success) {
+            // Update payout status to completed with transaction reference
+            await payoutService.updatePayoutStatus(
+              payout.id,
+              'completed',
+              result.transactionId
+            );
+
+            // Send processed notification
             await payoutNotificationService.sendProcessedPayoutNotification(payout);
-          }
+            successCount++;
 
-        } else {
-          // Update payout status to failed
-          await payoutService.updatePayoutStatus(result.payout_id, 'failed');
+          } else {
+            // Update payout status to failed
+            await payoutService.updatePayoutStatus(payout.id, 'failed');
 
-          // Send failed notification
-          const payout = waiterPayouts.find(p => p.id === result.payout_id);
-          if (payout) {
+            // Send failed notification
             await payoutNotificationService.sendFailedPayoutNotification(payout);
-          }
 
-          errors.push(`Waiter payout failed: ${result.error}`);
+            errors.push(`Waiter payout failed: ${result.error}`);
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Error updating payout status for ${payout.id}:`, error);
+          errors.push(`Failed to update payout status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          failCount++;
         }
-      } catch (error) {
-        console.error(`Error updating payout status for ${result.payout_id}:`, error);
-        errors.push(`Failed to update payout status: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
     return {
       success: bulkResult.success,
-      processed: bulkResult.successful_payouts,
-      failed: bulkResult.failed_payouts,
-      total_amount: bulkResult.total_amount,
-      results: bulkResult.results,
-      errors: [...errors, ...bulkResult.errors]
+      processed: successCount,
+      failed: failCount,
+      total_amount: bulkResult.totalAmount || 0,
+      results: bulkResult.results || [],
+      errors
     };
   }
 
   /**
-   * Process group payouts using bank transfer integration
+   * Process group payouts using PesaWise
    */
   async processGroupPayouts(payouts: Payout[], dryRun = false): Promise<{
     success: boolean;
@@ -199,114 +199,111 @@ export class PayoutProcessor {
       };
     }
 
-    console.log(`Processing ${groupPayouts.length} group payouts...`);
+    console.log(`Processing ${groupPayouts.length} group payouts via PesaWise...`);
+
+    // Get distribution group details
+    const groupIds = groupPayouts.map(p => p.distribution_group_id).filter(Boolean) as string[];
+    const { data: groups, error: groupsError } = await this.supabase
+      .from('distribution_groups')
+      .select('id, name, phone_number')
+      .in('id', groupIds);
+
+    if (groupsError) {
+      throw new Error('Failed to fetch distribution group details');
+    }
+
+    // Prepare bulk payout recipients
+    const recipients: BulkPaymentRecipient[] = groupPayouts.map(payout => {
+      const group = groups?.find(g => g.id === payout.distribution_group_id);
+      if (!group || !group.phone_number) {
+        throw new Error(`Group or phone number not found for payout ${payout.id}`);
+      }
+
+      return {
+        phoneNumber: group.phone_number,
+        amount: payout.amount,
+        reference: `PAYOUT-${payout.id.slice(-8)}`,
+        name: group.name
+      };
+    });
+
+    let bulkResult;
+    const errors: string[] = [];
 
     if (dryRun) {
-      // Simulate successful processing for dry run
-      const results = groupPayouts.map(payout => ({
+      console.log('DRY RUN: Simulating PesaWise group payments...');
+      bulkResult = {
         success: true,
-        payout_id: payout.id,
-        group_name: payout.group_name,
-        amount: payout.amount,
-        transaction_id: `DRY-RUN-BANK-${Date.now()}`,
-        reference: `PAYOUT-${payout.id.slice(-8)}`
-      }));
-
-      // Update statuses to processing for dry run
-      for (const payout of groupPayouts) {
-        await payoutService.updatePayoutStatus(
-          payout.id,
-          'processing',
-          `DRY-RUN-BANK-${Date.now()}`
-        );
-      }
-
-      const totalAmount = groupPayouts.reduce((sum, p) => sum + p.amount, 0);
-
-      return {
-        success: true,
-        processed: groupPayouts.length,
-        failed: 0,
-        total_amount: totalAmount,
-        results,
-        errors: []
+        message: 'Dry run completed',
+        totalAmount: recipients.reduce((sum, r) => sum + r.amount, 0),
+        totalRecipients: recipients.length,
+        results: recipients.map((r, idx) => ({
+          phoneNumber: r.phoneNumber,
+          amount: r.amount,
+          reference: r.reference,
+          success: true,
+          transactionId: `DRY-RUN-GROUP-${Date.now()}-${idx}`
+        }))
       };
+    } else {
+      // Process actual PesaWise bulk payments
+      try {
+        bulkResult = await pesaWiseBulkPaymentService.processBulkPayments({ recipients });
+      } catch (error) {
+        console.error('PesaWise group payment processing failed:', error);
+        errors.push(`PesaWise group payment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        
+        return {
+          success: false,
+          processed: 0,
+          failed: groupPayouts.length,
+          total_amount: 0,
+          results: [],
+          errors
+        };
+      }
     }
 
-    // Process actual bank transfers
-    try {
-      const { bankTransferService } = await import('@/utils/payments/bank-transfers');
-      const bulkResult = await bankTransferService.processBulkBankTransfers(groupPayouts);
+    // Update payout statuses
+    let successCount = 0;
+    let failCount = 0;
 
-      // Update payout statuses based on bank transfer results
-      for (const result of bulkResult.results) {
+    if (bulkResult.results) {
+      for (let i = 0; i < bulkResult.results.length; i++) {
+        const result = bulkResult.results[i];
+        const payout = groupPayouts[i];
+
         try {
           if (result.success) {
-            // Update payout status to processing with transaction reference
             await payoutService.updatePayoutStatus(
-              result.payout_id,
-              'processing',
-              result.transaction_id || result.reference
+              payout.id,
+              'completed',
+              result.transactionId
             );
-
-            // Send processed notification
-            const payout = groupPayouts.find(p => p.id === result.payout_id);
-            if (payout) {
-              await payoutNotificationService.sendProcessedPayoutNotification(payout);
-            }
-
+            await payoutNotificationService.sendProcessedPayoutNotification(payout);
+            successCount++;
           } else {
-            // Update payout status to failed
-            await payoutService.updatePayoutStatus(result.payout_id, 'failed');
-
-            // Send failed notification
-            const payout = groupPayouts.find(p => p.id === result.payout_id);
-            if (payout) {
-              await payoutNotificationService.sendFailedPayoutNotification(payout);
-            }
+            await payoutService.updatePayoutStatus(payout.id, 'failed');
+            await payoutNotificationService.sendFailedPayoutNotification(payout);
+            errors.push(`Group payout failed: ${result.error}`);
+            failCount++;
           }
         } catch (error) {
-          console.error(`Error updating payout status for ${result.payout_id}:`, error);
+          console.error(`Error updating payout status for ${payout.id}:`, error);
+          errors.push(`Failed to update payout status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          failCount++;
         }
       }
-
-      return {
-        success: bulkResult.success,
-        processed: bulkResult.successful_transfers,
-        failed: bulkResult.failed_transfers,
-        total_amount: bulkResult.total_amount,
-        results: bulkResult.results,
-        errors: bulkResult.errors
-      };
-
-    } catch (error) {
-      console.error('Bank transfer processing failed:', error);
-      
-      // Mark all payouts as failed
-      for (const payout of groupPayouts) {
-        try {
-          await payoutService.updatePayoutStatus(payout.id, 'failed');
-          await payoutNotificationService.sendFailedPayoutNotification(payout);
-        } catch (updateError) {
-          console.error(`Error updating failed payout ${payout.id}:`, updateError);
-        }
-      }
-
-      return {
-        success: false,
-        processed: 0,
-        failed: groupPayouts.length,
-        total_amount: 0,
-        results: groupPayouts.map(payout => ({
-          success: false,
-          payout_id: payout.id,
-          group_name: payout.group_name,
-          amount: payout.amount,
-          error: error instanceof Error ? error.message : 'Bank transfer failed'
-        })),
-        errors: [error instanceof Error ? error.message : 'Bank transfer processing failed']
-      };
     }
+
+    return {
+      success: bulkResult.success,
+      processed: successCount,
+      failed: failCount,
+      total_amount: bulkResult.totalAmount || 0,
+      results: bulkResult.results || [],
+      errors
+    };
   }
 
   /**
@@ -408,38 +405,37 @@ export class PayoutProcessor {
   }
 
   /**
-   * Handle M-Pesa B2C callback to update payout status
+   * Handle PesaWise payment callback to update payout status
    */
-  async handleMPesaB2CCallback(callbackData: any): Promise<void> {
+  async handlePesaWiseCallback(callbackData: any): Promise<void> {
     try {
-      const transactionDetails = mpesaBulkPaymentService.extractB2CTransactionDetails(callbackData);
+      console.log('Processing PesaWise payout callback:', callbackData);
       
-      if (!transactionDetails) {
-        console.error('Invalid B2C callback data:', callbackData);
+      // PesaWise callback structure may vary - adjust based on actual callback format
+      const transactionId = callbackData.requestId || callbackData.transactionId;
+      const status = callbackData.status === 'SUCCESS' ? 'completed' : 'failed';
+
+      if (!transactionId) {
+        console.error('No transaction ID in callback data');
         return;
       }
 
-      // Find payout by conversation ID
+      // Find payout by transaction reference
       const { data: payouts, error } = await this.supabase
         .from('payouts')
         .select('*')
-        .eq('transaction_reference', transactionDetails.conversationId)
-        .eq('status', 'processing');
+        .eq('transaction_reference', transactionId)
+        .in('status', ['pending', 'processing']);
 
       if (error || !payouts || payouts.length === 0) {
-        console.error('Payout not found for conversation ID:', transactionDetails.conversationId);
+        console.error('Payout not found for transaction ID:', transactionId);
         return;
       }
 
       const payout = payouts[0];
-      const status = mpesaBulkPaymentService.parseB2CTransactionStatus(transactionDetails.resultCode);
 
       // Update payout status
-      await payoutService.updatePayoutStatus(
-        payout.id,
-        status,
-        transactionDetails.transactionId
-      );
+      await payoutService.updatePayoutStatus(payout.id, status, transactionId);
 
       // Send notification based on status
       if (status === 'completed') {
@@ -448,10 +444,10 @@ export class PayoutProcessor {
         await payoutNotificationService.sendFailedPayoutNotification(payout);
       }
 
-      console.log(`Updated payout ${payout.id} status to ${status} (Transaction: ${transactionDetails.transactionId})`);
+      console.log(`Updated payout ${payout.id} status to ${status}`);
 
     } catch (error) {
-      console.error('Error handling M-Pesa B2C callback:', error);
+      console.error('Error handling PesaWise callback:', error);
     }
   }
 

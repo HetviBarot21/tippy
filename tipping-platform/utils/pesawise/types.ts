@@ -5,11 +5,10 @@
 
 // STK Push Request
 export interface PesaWiseSTKPushRequest {
-  phone: string;
+  balanceId: string;
   amount: number;
+  phoneNumber: string;
   reference: string;
-  description: string;
-  callback_url?: string;
 }
 
 // STK Push Response

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/utils/supabase/tenant-client';
-import { payoutProcessor } from '@/utils/payouts/processor';
 
-export async function POST(request: NextRequest) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const supabase = createServiceClient();
     
@@ -31,21 +33,42 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { payoutIds, restaurantId, dryRun = false } = body;
+    const { commission_rate } = body;
 
-    console.log(`Processing payouts: ${payoutIds?.length || 'all'} payouts, dryRun: ${dryRun}`);
+    // Validate commission rate
+    if (typeof commission_rate !== 'number' || commission_rate < 0 || commission_rate > 100) {
+      return NextResponse.json(
+        { error: 'Invalid commission rate. Must be between 0 and 100.' },
+        { status: 400 }
+      );
+    }
 
-    // Process payouts
-    const result = await payoutProcessor.processPayouts({
-      payoutIds,
-      restaurantId,
-      dryRun
+    // Update restaurant commission rate
+    const { data: restaurant, error } = await supabase
+      .from('restaurants')
+      .update({ 
+        commission_rate,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', params.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating commission rate:', error);
+      return NextResponse.json(
+        { error: 'Failed to update commission rate' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      restaurant
     });
 
-    return NextResponse.json(result);
-
   } catch (error) {
-    console.error('Payout processing API error:', error);
+    console.error('Commission rate update API error:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',

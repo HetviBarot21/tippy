@@ -1,12 +1,37 @@
-import { createServiceClient } from '@/utils/supabase/tenant-client';
+import { createClient } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { SuperAdminDashboard } from '@/components/ui/SuperAdmin/SuperAdminDashboard';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
 export default async function AdminPage() {
-  const supabase = createServiceClient();
+  // Create service role client that bypasses RLS
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    }
+  );
   
   // Check if user is authenticated and is super admin
-  const { data: { user }, error } = await supabase.auth.getUser();
+  const cookieStore = cookies();
+  const authClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        }
+      }
+    }
+  );
+  
+  const { data: { user }, error } = await authClient.auth.getUser();
   
   if (error || !user) {
     redirect('/signin');
@@ -25,7 +50,7 @@ export default async function AdminPage() {
 
   // Get system-wide statistics
   const [
-    { data: restaurants },
+    { data: restaurants, error: restaurantsError },
     { data: totalTips },
     { data: totalCommissions },
     { data: activeWaiters },
@@ -34,7 +59,7 @@ export default async function AdminPage() {
     // Total restaurants
     supabase
       .from('restaurants')
-      .select('id, name, slug, is_active, created_at')
+      .select('id, name, slug, is_active, commission_rate, created_at')
       .order('created_at', { ascending: false }),
     
     // Total tips this month
@@ -66,6 +91,9 @@ export default async function AdminPage() {
       .order('created_at', { ascending: false })
       .limit(20)
   ]);
+
+  console.log('Restaurants fetched:', restaurants?.length, 'Error:', restaurantsError);
+  console.log('First 3 restaurants:', restaurants?.slice(0, 3));
 
   const stats = {
     totalRestaurants: restaurants?.length || 0,

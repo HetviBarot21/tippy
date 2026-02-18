@@ -14,8 +14,25 @@ interface Props {
 export default async function RestaurantDashboard({ params }: Props) {
   const supabase = createClient();
   
-  // For demo purposes, skip authentication and use service role
-  // In production, you'd want proper authentication
+  // Check authentication
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  
+  if (authError || !user) {
+    redirect('/signin');
+  }
+
+  // Check if user has access to this restaurant
+  const userRestaurantId = user.user_metadata?.restaurant_id;
+  const isSuperAdmin = user.email && (
+    user.email.endsWith('@yourapps.co.ke') || 
+    user.email.endsWith('@yourappsltd.com') ||
+    ['admin@tippy.co.ke', 'support@tippy.co.ke'].includes(user.email)
+  );
+
+  // Only allow access if user owns this restaurant OR is super admin
+  if (!isSuperAdmin && userRestaurantId !== params.restaurantId) {
+    redirect('/unauthorized');
+  }
   
   // Get restaurant data
   const { data: restaurant, error: restaurantError } = await (supabase as any)

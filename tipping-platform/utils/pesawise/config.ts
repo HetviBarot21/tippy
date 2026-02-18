@@ -6,7 +6,7 @@
 export interface PesaWiseConfig {
   apiKey: string;
   secretKey: string;
-  businessShortCode: string;
+  balanceId: string;
   environment: 'sandbox' | 'production';
   baseUrl: string;
 }
@@ -14,16 +14,14 @@ export interface PesaWiseConfig {
 export const pesaWiseConfig: PesaWiseConfig = {
   apiKey: process.env.PESAWISE_API_KEY || '',
   secretKey: process.env.PESAWISE_SECRET_KEY || '',
-  businessShortCode: process.env.PESAWISE_BUSINESS_SHORT_CODE || '',
+  balanceId: process.env.PESAWISE_BALANCE_ID || '',
   environment: (process.env.PESAWISE_ENVIRONMENT as 'sandbox' | 'production') || 'sandbox',
-  baseUrl: process.env.PESAWISE_ENVIRONMENT === 'production' 
-    ? 'https://api.pesawise.com' 
-    : 'https://sandbox.pesawise.com'
+  baseUrl: process.env.PESAWISE_API_URL || 'https://api.pesawise.com'
 };
 
 // Validation function to ensure all required config is present
 export function validatePesaWiseConfig(): void {
-  const requiredFields: (keyof PesaWiseConfig)[] = ['apiKey', 'secretKey', 'businessShortCode'];
+  const requiredFields: (keyof PesaWiseConfig)[] = ['apiKey', 'secretKey', 'balanceId'];
   
   for (const field of requiredFields) {
     if (!pesaWiseConfig[field]) {

@@ -1,8 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { useState } from 'react';
 import { Tables } from '@/types_db';
 
 type Waiter = Pick<Tables<'waiters'>, 'id' | 'name' | 'profile_photo_url'>;
@@ -21,164 +19,18 @@ interface PaymentInterfaceProps {
   onBack: () => void;
 }
 
-// Initialize Stripe
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
-);
-
-const cardElementOptions = {
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#ffffff',
-      '::placeholder': {
-        color: '#9ca3af',
-      },
-      backgroundColor: 'transparent',
-    },
-    invalid: {
-      color: '#ef4444',
-    },
-  },
-};
-
-function CardPaymentForm({
-  tipType,
-  selectedWaiter,
-  restaurantId,
-  amount,
-  tableId,
-  onSuccess,
-  onError
-}: Omit<PaymentInterfaceProps, 'restaurantName' | 'tableNumber' | 'tableName' | 'onBack'>) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string>('');
-
-  // Create payment intent when component mounts
-  useEffect(() => {
-    const createPaymentIntent = async () => {
-      try {
-        const response = await fetch('/api/payments', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount,
-            tipType,
-            restaurantId,
-            waiterId: selectedWaiter?.id,
-            tableId,
-            paymentMethod: 'card'
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to create payment intent');
-        }
-
-        setClientSecret(data.clientSecret);
-      } catch (error) {
-        console.error('Error creating payment intent:', error);
-        onError(error instanceof Error ? error.message : 'Failed to initialize payment');
-      }
-    };
-
-    createPaymentIntent();
-  }, [amount, tipType, restaurantId, selectedWaiter?.id, tableId, onError]);
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!stripe || !elements || !clientSecret) {
-      return;
-    }
-
-    setIsProcessing(true);
-
-    const cardElement = elements.getElement(CardElement);
-
-    if (!cardElement) {
-      onError('Card element not found');
-      setIsProcessing(false);
-      return;
-    }
-
-    try {
-      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardElement,
-        },
-      });
-
-      if (error) {
-        console.error('Payment failed:', error);
-        onError(error.message || 'Payment failed');
-      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        onSuccess(paymentIntent.id);
-      }
-    } catch (error) {
-      console.error('Payment error:', error);
-      onError('An unexpected error occurred');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-zinc-800 rounded-lg p-6 border border-zinc-700">
-        <h3 className="text-white font-medium mb-4">Card Details</h3>
-        <div className="bg-zinc-900 rounded-lg p-4 border border-zinc-600">
-          <CardElement options={cardElementOptions} />
-        </div>
-      </div>
-
-      <button
-        type="submit"
-        disabled={!stripe || !clientSecret || isProcessing}
-        className="w-full bg-blue-600 text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isProcessing ? (
-          <div className="flex items-center justify-center space-x-2">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span>Processing Payment...</span>
-          </div>
-        ) : (
-          `Pay ${amount} KES`
-        )}
-      </button>
-
-      <div className="text-center">
-        <p className="text-xs text-zinc-500">
-          Your payment is secured by Stripe with 256-bit SSL encryption
-        </p>
-      </div>
-    </form>
-  );
-}
-
-function MPesaPaymentForm({
-  tipType,
-  selectedWaiter,
-  restaurantId,
-  amount,
-  tableId,
-  onSuccess,
-  onError
-}: Omit<PaymentInterfaceProps, 'restaurantName' | 'tableNumber' | 'tableName' | 'onBack'>) {
+export default function PaymentInterface(props: PaymentInterfaceProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [tipId, setTipId] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState<'input' | 'processing' | 'success' | 'error'>('input');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [transactionId, setTransactionId] = useState('');
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsProcessing(true);
+    setPaymentStatus('processing');
     setStatusMessage('Initiating M-Pesa payment...');
 
     try {
@@ -188,11 +40,11 @@ function MPesaPaymentForm({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount,
-          tipType,
-          restaurantId,
-          waiterId: selectedWaiter?.id,
-          tableId,
+          amount: props.amount,
+          tipType: props.tipType,
+          restaurantId: props.restaurantId,
+          waiterId: props.selectedWaiter?.id,
+          tableId: props.tableId,
           paymentMethod: 'mpesa',
           customerPhone: phoneNumber
         }),
@@ -204,7 +56,6 @@ function MPesaPaymentForm({
         throw new Error(data.error || 'Failed to initiate M-Pesa payment');
       }
 
-      setTipId(data.tipId);
       setStatusMessage('STK Push sent to your phone. Please check your phone and enter your M-Pesa PIN.');
       
       // Start polling for payment status
@@ -212,7 +63,8 @@ function MPesaPaymentForm({
 
     } catch (error) {
       console.error('M-Pesa payment error:', error);
-      onError(error instanceof Error ? error.message : 'Failed to initiate M-Pesa payment');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to initiate M-Pesa payment');
+      setPaymentStatus('error');
       setIsProcessing(false);
     }
   };
@@ -228,18 +80,25 @@ function MPesaPaymentForm({
         
         if (data.status === 'completed') {
           setStatusMessage('Payment successful!');
-          onSuccess(data.tipId);
+          setTransactionId(data.tipId);
+          setPaymentStatus('success');
+          setTimeout(() => {
+            props.onSuccess(data.tipId);
+          }, 2000);
           return;
         } else if (data.status === 'failed') {
-          onError('Payment failed. Please try again.');
+          setErrorMessage('Payment failed. Please try again.');
+          setPaymentStatus('error');
           setIsProcessing(false);
           return;
         } else if (data.status === 'cancelled') {
-          onError('Payment was cancelled. You can try again.');
+          setErrorMessage('Payment was cancelled. You can try again.');
+          setPaymentStatus('error');
           setIsProcessing(false);
           return;
         } else if (data.status === 'timeout') {
-          onError('Payment timed out. Please try again.');
+          setErrorMessage('Payment timed out. Please try again.');
+          setPaymentStatus('error');
           setIsProcessing(false);
           return;
         }
@@ -250,7 +109,8 @@ function MPesaPaymentForm({
           setTimeout(poll, 10000); // Poll every 10 seconds
           setStatusMessage(`Waiting for payment confirmation... (${Math.floor(attempts * 10 / 60)}:${(attempts * 10 % 60).toString().padStart(2, '0')})`);
         } else {
-          onError('Payment verification timed out. Please check your M-Pesa messages or try again.');
+          setErrorMessage('Payment verification timed out. Please check your M-Pesa messages or try again.');
+          setPaymentStatus('error');
           setIsProcessing(false);
         }
       } catch (error) {
@@ -259,7 +119,8 @@ function MPesaPaymentForm({
         if (attempts < maxAttempts) {
           setTimeout(poll, 10000);
         } else {
-          onError('Unable to verify payment status. Please contact support if money was deducted.');
+          setErrorMessage('Unable to verify payment status. Please contact support if money was deducted.');
+          setPaymentStatus('error');
           setIsProcessing(false);
         }
       }
@@ -269,91 +130,12 @@ function MPesaPaymentForm({
     setTimeout(poll, 5000);
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-zinc-800 rounded-lg p-6 border border-zinc-700">
-        <h3 className="text-white font-medium mb-4">M-Pesa Payment</h3>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-zinc-300 mb-2">
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              id="phone"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="254712345678 or 0712345678"
-              className="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              required
-              disabled={isProcessing}
-            />
-            <p className="text-xs text-zinc-500 mt-1">
-              Enter your Safaricom phone number
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {statusMessage && (
-        <div className="bg-blue-900/50 border border-blue-700 rounded-lg p-4">
-          <div className="flex items-center space-x-3">
-            {isProcessing && (
-              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-            )}
-            <p className="text-blue-200 text-sm">{statusMessage}</p>
-          </div>
-        </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={isProcessing || !phoneNumber}
-        className="w-full bg-green-600 text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isProcessing ? (
-          <div className="flex items-center justify-center space-x-2">
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span>Processing...</span>
-          </div>
-        ) : (
-          `Pay ${amount} KES via M-Pesa`
-        )}
-      </button>
-
-      <div className="text-center">
-        <p className="text-xs text-zinc-500">
-          You will receive an STK push notification on your phone. Enter your M-Pesa PIN to complete the payment.
-        </p>
-      </div>
-    </form>
-  );
-}
-
-export default function PaymentInterface(props: PaymentInterfaceProps) {
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'mpesa' | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<'selecting' | 'processing' | 'success' | 'error'>('selecting');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [transactionId, setTransactionId] = useState('');
-
-  const handlePaymentSuccess = (txId: string) => {
-    setTransactionId(txId);
-    setPaymentStatus('success');
-    setTimeout(() => {
-      props.onSuccess(txId);
-    }, 2000);
-  };
-
-  const handlePaymentError = (error: string) => {
-    setErrorMessage(error);
-    setPaymentStatus('error');
-  };
-
   const resetPayment = () => {
-    setSelectedPaymentMethod(null);
-    setPaymentStatus('selecting');
+    setPaymentStatus('input');
     setErrorMessage('');
     setTransactionId('');
+    setStatusMessage('');
+    setIsProcessing(false);
   };
 
   if (paymentStatus === 'success') {
@@ -406,8 +188,8 @@ export default function PaymentInterface(props: PaymentInterfaceProps) {
   return (
     <div className="space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-xl font-semibold text-white mb-2">Choose Payment Method</h2>
-        <p className="text-zinc-400">Select how you'd like to pay your tip</p>
+        <h2 className="text-xl font-semibold text-white mb-2">M-Pesa Payment</h2>
+        <p className="text-zinc-400">Pay your tip via M-Pesa</p>
       </div>
 
       {/* Tip Summary */}
@@ -423,83 +205,69 @@ export default function PaymentInterface(props: PaymentInterfaceProps) {
         </div>
       </div>
 
-      {!selectedPaymentMethod ? (
-        <div className="space-y-4">
-          <button
-            onClick={() => setSelectedPaymentMethod('card')}
-            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg p-4 text-left hover:bg-zinc-700 transition-colors"
-          >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-white font-medium">Credit/Debit Card</h3>
-                <p className="text-zinc-400 text-sm">Visa, Mastercard, and other cards</p>
-              </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-zinc-800 rounded-lg p-6 border border-zinc-700">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">M</span>
             </div>
-          </button>
-
-          <button
-            onClick={() => setSelectedPaymentMethod('mpesa')}
-            className="w-full bg-zinc-800 border border-zinc-600 rounded-lg p-4 text-left hover:bg-zinc-700 transition-colors"
-          >
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-green-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
-              </div>
-              <div>
-                <h3 className="text-white font-medium">M-Pesa</h3>
-                <p className="text-zinc-400 text-sm">Mobile money payment</p>
-              </div>
-            </div>
-          </button>
-        </div>
-      ) : (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-white">
-              {selectedPaymentMethod === 'card' ? 'Card Payment' : 'M-Pesa Payment'}
-            </h3>
-            <button
-              onClick={() => setSelectedPaymentMethod(null)}
-              className="text-zinc-400 hover:text-white transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <h3 className="text-white font-medium">M-Pesa Payment</h3>
           </div>
-
-          {selectedPaymentMethod === 'card' ? (
-            <Elements stripe={stripePromise}>
-              <CardPaymentForm
-                tipType={props.tipType}
-                selectedWaiter={props.selectedWaiter}
-                restaurantId={props.restaurantId}
-                amount={props.amount}
-                tableId={props.tableId}
-                onSuccess={handlePaymentSuccess}
-                onError={handlePaymentError}
-              />
-            </Elements>
-          ) : (
-            <MPesaPaymentForm
-              tipType={props.tipType}
-              selectedWaiter={props.selectedWaiter}
-              restaurantId={props.restaurantId}
-              amount={props.amount}
-              tableId={props.tableId}
-              onSuccess={handlePaymentSuccess}
-              onError={handlePaymentError}
+          
+          <div>
+            <label htmlFor="phone" className="block text-sm font-medium text-zinc-300 mb-2">
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              id="phone"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="254712345678 or 0712345678"
+              className="w-full bg-zinc-900 border border-zinc-600 rounded-lg px-4 py-3 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              required
+              disabled={isProcessing}
             />
-          )}
+            <p className="text-xs text-zinc-500 mt-1">
+              Enter your Safaricom phone number
+            </p>
+          </div>
         </div>
-      )}
 
-      {!selectedPaymentMethod && (
+        {statusMessage && (
+          <div className="bg-blue-900/50 border border-blue-700 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              {isProcessing && (
+                <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <p className="text-blue-200 text-sm">{statusMessage}</p>
+            </div>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isProcessing || !phoneNumber}
+          className="w-full bg-green-600 text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isProcessing ? (
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>Processing...</span>
+            </div>
+          ) : (
+            `Pay ${props.amount} KES via M-Pesa`
+          )}
+        </button>
+
+        <div className="text-center">
+          <p className="text-xs text-zinc-500">
+            You will receive an STK push notification on your phone. Enter your M-Pesa PIN to complete the payment.
+          </p>
+        </div>
+      </form>
+
+      {!isProcessing && (
         <button
           onClick={props.onBack}
           className="w-full bg-zinc-700 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 hover:bg-zinc-600 border border-zinc-600"

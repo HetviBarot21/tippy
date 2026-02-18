@@ -24,11 +24,15 @@ export class PesaWiseService {
   }
 
   /**
-   * Generate request signature for API authentication
+   * Generate authentication headers for PesaWise API
    */
-  private generateSignature(payload: string, timestamp: string): string {
-    const stringToSign = `${payload}${timestamp}${this.config.secretKey}`;
-    return crypto.createHash('sha256').update(stringToSign).digest('hex');
+  private getHeaders(): HeadersInit {
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'api-key': this.config.apiKey,
+      'api-secret': this.config.secretKey
+    };
   }
 
   /**
@@ -40,20 +44,10 @@ export class PesaWiseService {
     data?: any
   ): Promise<T> {
     const url = `${this.config.baseUrl}${endpoint}`;
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const payload = data ? JSON.stringify(data) : '';
-    const signature = this.generateSignature(payload, timestamp);
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-API-Key': this.config.apiKey,
-      'X-Timestamp': timestamp,
-      'X-Signature': signature,
-    };
+    const headers = this.getHeaders();
 
     console.log(`PesaWise API Request: ${method} ${url}`, {
-      headers: { ...headers, 'X-API-Key': '[REDACTED]', 'X-Signature': '[REDACTED]' },
+      headers: { ...headers, 'api-key': '[REDACTED]', 'api-secret': '[REDACTED]' },
       data
     });
 
@@ -69,7 +63,7 @@ export class PesaWiseService {
       console.log(`PesaWise API Response: ${response.status}`, responseData);
 
       if (!response.ok) {
-        throw new Error(`PesaWise API Error: ${response.status} - ${responseData.message || 'Unknown error'}`);
+        throw new Error(`PesaWise API Error: ${response.status} - ${responseData.message || responseData.detail || 'Unknown error'}`);
       }
 
       return responseData;
@@ -111,15 +105,14 @@ export class PesaWiseService {
       const normalizedPhone = this.normalizePhoneNumber(request.phoneNumber);
 
       const payload: PesaWiseSTKPushRequest = {
-        phone: normalizedPhone,
+        balanceId: this.config.balanceId,
         amount: request.amount,
-        reference: request.accountReference,
-        description: request.transactionDesc,
-        callback_url: pesaWiseCallbacks.callbackUrl
+        phoneNumber: normalizedPhone,
+        reference: request.accountReference
       };
 
       const response = await this.makeRequest<PesaWiseSTKPushResponse>(
-        '/api/v1/payments/stk-push',
+        '/api/payments/stk-push',
         'POST',
         payload
       );
@@ -145,7 +138,7 @@ export class PesaWiseService {
       };
 
       const response = await this.makeRequest<PesaWiseStatusQueryResponse>(
-        '/api/v1/payments/status',
+        '/payments/status',
         'POST',
         payload
       );
@@ -183,7 +176,41 @@ export class PesaWiseService {
   }
 
   /**
-   * Get transaction history
+   * Get wallet transactions
+   */
+  async getWalletTransactions(
+    balanceId?: string,
+    page: number = 1,
+    perPage: number = 50
+  ): Promise<PesaWiseTransactionHistoryResponse> {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        per_page: perPage.toString(),
+      });
+
+      if (balanceId) {
+        params.append('balanceId', balanceId);
+      }
+
+      const response = await this.makeRequest<PesaWiseTransactionHistoryResponse>(
+        `/api/payments/transactions?${params.toString()}`,
+        'GET'
+      );
+
+      return response;
+    } catch (error) {
+      console.error('Wallet transactions query failed:', error);
+      return {
+        success: false,
+        message: 'Failed to get wallet transactions',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
+   * Get transaction history (legacy method)
    */
   async getTransactionHistory(
     page: number = 1,

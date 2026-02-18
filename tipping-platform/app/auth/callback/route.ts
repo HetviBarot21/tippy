@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const supabase = createClient();
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { error, data } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
       return NextResponse.redirect(
@@ -23,9 +23,33 @@ export async function GET(request: NextRequest) {
         )
       );
     }
+
+    // Get user data to determine redirect
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Check if super admin
+      const isSuperAdmin = user.email && (
+        user.email.endsWith('@yourapps.co.ke') || 
+        user.email.endsWith('@yourappsltd.com') ||
+        ['admin@tippy.co.ke', 'support@tippy.co.ke'].includes(user.email)
+      );
+
+      if (isSuperAdmin) {
+        // Redirect super admin to admin dashboard
+        return NextResponse.redirect(`${requestUrl.origin}/admin`);
+      }
+
+      // Check if restaurant owner
+      const restaurantId = user.user_metadata?.restaurant_id;
+      if (restaurantId) {
+        // Redirect restaurant owner to their dashboard
+        return NextResponse.redirect(`${requestUrl.origin}/dashboard/${restaurantId}`);
+      }
+    }
   }
 
-  // URL to redirect to after sign in process completes
+  // Default redirect to account page
   return NextResponse.redirect(
     getStatusRedirect(
       `${requestUrl.origin}/account`,

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/utils/supabase/tenant-client';
-import { payoutProcessor } from '@/utils/payouts/processor';
+import { pesaWiseService } from '@/utils/pesawise/service';
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
     
@@ -30,22 +30,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const { payoutIds, restaurantId, dryRun = false } = body;
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const perPage = parseInt(searchParams.get('perPage') || '20');
 
-    console.log(`Processing payouts: ${payoutIds?.length || 'all'} payouts, dryRun: ${dryRun}`);
+    // Get wallet balance
+    const balanceResponse = await pesaWiseService.getAccountBalance();
 
-    // Process payouts
-    const result = await payoutProcessor.processPayouts({
-      payoutIds,
-      restaurantId,
-      dryRun
+    // Get wallet transactions
+    const transactionsResponse = await pesaWiseService.getWalletTransactions(
+      undefined,
+      page,
+      perPage
+    );
+
+    return NextResponse.json({
+      balance: balanceResponse,
+      transactions: transactionsResponse
     });
 
-    return NextResponse.json(result);
-
   } catch (error) {
-    console.error('Payout processing API error:', error);
+    console.error('PesaWise wallet API error:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',

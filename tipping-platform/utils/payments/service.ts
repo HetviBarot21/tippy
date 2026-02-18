@@ -1,10 +1,9 @@
-import { stripe } from '@/utils/stripe/config';
 import { createClient } from '@supabase/supabase-js';
 import { Tables, TablesInsert } from '@/types_db';
 import { PaymentValidator, formatValidationErrors } from './validation';
 import { commissionService } from '@/utils/commission/service';
 
-type PaymentMethod = 'card' | 'mpesa';
+type PaymentMethod = 'mpesa';
 
 // Use service role client to bypass RLS for testing
 function createServiceClient() {
@@ -34,8 +33,6 @@ export interface PaymentResponse {
   success: boolean;
   tipId: string;
   paymentMethod: PaymentMethod;
-  clientSecret?: string; // For card payments
-  paymentIntentId?: string; // For card payments
   stkPushId?: string; // For M-Pesa payments
   message?: string;
   error?: string;
@@ -122,67 +119,7 @@ export class PaymentService {
   }
 
   /**
-   * Process card payment using Stripe
-   */
-  private async processCardPayment(tip: Tables<'tips'>, request: CreateTipRequest): Promise<PaymentResponse> {
-    try {
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(request.amount * 100), // Convert to cents
-        currency: 'kes',
-        metadata: {
-          tipId: tip.id,
-          restaurantId: request.restaurantId,
-          tipType: request.tipType,
-          waiterId: request.waiterId || '',
-          tableId: request.tableId
-        },
-        automatic_payment_methods: {
-          enabled: true,
-        },
-      });
-
-      // Update tip with transaction ID and processing status
-      const supabase = this.getSupabase();
-      const { error } = await (supabase as any)
-        .from('tips')
-        .update({ 
-          transaction_id: paymentIntent.id,
-          payment_status: 'processing'
-        })
-        .eq('id', tip.id);
-
-      if (error) {
-        console.error('Error updating tip with payment intent:', error);
-      }
-
-      return {
-        success: true,
-        tipId: tip.id,
-        paymentMethod: 'card',
-        clientSecret: paymentIntent.client_secret || undefined,
-        paymentIntentId: paymentIntent.id
-      };
-
-    } catch (error) {
-      console.error('Stripe error:', error);
-      
-      // Update tip status to failed
-      const supabase = this.getSupabase();
-      const { error: updateError } = await (supabase as any)
-        .from('tips')
-        .update({ payment_status: 'failed' })
-        .eq('id', tip.id);
-
-      if (updateError) {
-        console.error('Error updating tip status to failed:', updateError);
-      }
-
-      throw new Error('Failed to create payment intent');
-    }
-  }
-
-  /**
-   * Process M-Pesa payment using PesaWise or Daraja API
+   * Process M-Pesa payment using PesaWise only
    */
   private async processMPesaPayment(tip: Tables<'tips'>, request: CreateTipRequest): Promise<PaymentResponse> {
     try {
@@ -195,107 +132,55 @@ export class PaymentService {
         throw new Error('Valid phone number is required for M-Pesa payments');
       }
 
-      console.log('Initiating M-Pesa payment:', {
+      console.log('Initiating M-Pesa payment via PesaWise:', {
         tipId: tip.id,
         amount: request.amount,
         phone: normalizedPhone
       });
 
-      // Try PesaWise first, fallback to Daraja if needed
-      const usePesaWise = process.env.MPESA_PROVIDER === 'pesawise' || process.env.PESAWISE_API_KEY;
-
-      if (usePesaWise) {
-        try {
-          // Use PesaWise
-          const { pesaWiseService } = await import('@/utils/pesawise/service');
-          
-          const stkPushResponse = await pesaWiseService.initiateSTKPush({
-            phoneNumber: normalizedPhone,
-            amount: request.amount,
-            accountReference: `TIP-${tip.id}`,
-            transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`
-          });
-
-          if (!stkPushResponse.success || !stkPushResponse.data) {
-            throw new Error(stkPushResponse.error || 'PesaWise STK Push failed');
-          }
-
-          console.log('PesaWise STK Push successful:', stkPushResponse);
-
-          // Update tip with PesaWise transaction details
-          const supabase = this.getSupabase();
-          const { error } = await (supabase as any)
-            .from('tips')
-            .update({ 
-              payment_status: 'processing',
-              transaction_id: stkPushResponse.data.checkout_request_id,
-              customer_phone: normalizedPhone,
-              metadata: {
-                merchantRequestId: stkPushResponse.data.merchant_request_id,
-                checkoutRequestId: stkPushResponse.data.checkout_request_id,
-                stkPushInitiated: new Date().toISOString(),
-                provider: 'pesawise'
-              }
-            })
-            .eq('id', tip.id);
-
-          if (error) {
-            console.error('Error updating tip for PesaWise:', error);
-          }
-
-          return {
-            success: true,
-            tipId: tip.id,
-            paymentMethod: 'mpesa',
-            message: stkPushResponse.data.customer_message || 'STK Push sent to your phone',
-            stkPushId: stkPushResponse.data.checkout_request_id
-          };
-
-        } catch (pesaWiseError) {
-          console.error('PesaWise payment failed, falling back to Daraja:', pesaWiseError);
-          // Continue to Daraja fallback
-        }
-      }
-
-      // Fallback to Daraja API
-      const { mpesaService } = await import('@/utils/mpesa/service');
+      // Use PesaWise
+      const { pesaWiseService } = await import('@/utils/pesawise/service');
       
-      const stkPushResponse = await mpesaService.initiateSTKPush({
+      const stkPushResponse = await pesaWiseService.initiateSTKPush({
         phoneNumber: normalizedPhone,
         amount: request.amount,
         accountReference: `TIP-${tip.id}`,
         transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`
       });
 
-      console.log('Daraja STK Push successful:', stkPushResponse);
+      if (!stkPushResponse.success || !stkPushResponse.data) {
+        throw new Error(stkPushResponse.error || 'PesaWise STK Push failed');
+      }
 
-      // Update tip with M-Pesa transaction details
+      console.log('PesaWise STK Push successful:', stkPushResponse);
+
+      // Update tip with PesaWise transaction details
       const supabase = this.getSupabase();
       const { error } = await (supabase as any)
         .from('tips')
         .update({ 
           payment_status: 'processing',
-          transaction_id: stkPushResponse.CheckoutRequestID,
+          transaction_id: stkPushResponse.data.checkout_request_id,
           customer_phone: normalizedPhone,
           metadata: {
-            merchantRequestId: stkPushResponse.MerchantRequestID,
-            checkoutRequestId: stkPushResponse.CheckoutRequestID,
+            merchantRequestId: stkPushResponse.data.merchant_request_id,
+            checkoutRequestId: stkPushResponse.data.checkout_request_id,
             stkPushInitiated: new Date().toISOString(),
-            provider: 'daraja'
+            provider: 'pesawise'
           }
         })
         .eq('id', tip.id);
 
       if (error) {
-        console.error('Error updating tip for M-Pesa:', error);
+        console.error('Error updating tip for PesaWise:', error);
       }
 
       return {
         success: true,
         tipId: tip.id,
         paymentMethod: 'mpesa',
-        message: stkPushResponse.CustomerMessage || 'STK Push sent to your phone',
-        stkPushId: stkPushResponse.CheckoutRequestID
+        message: stkPushResponse.data.customer_message || 'STK Push sent to your phone',
+        stkPushId: stkPushResponse.data.checkout_request_id
       };
 
     } catch (error) {
@@ -336,13 +221,11 @@ export class PaymentService {
       // Create tip record
       const tip = await this.createTipRecord(request, commission);
 
-      // Process payment based on method
-      if (request.paymentMethod === 'card') {
-        return await this.processCardPayment(tip, request);
-      } else if (request.paymentMethod === 'mpesa') {
+      // Process payment via M-Pesa (PesaWise)
+      if (request.paymentMethod === 'mpesa') {
         return await this.processMPesaPayment(tip, request);
       } else {
-        throw new Error('Invalid payment method');
+        throw new Error('Invalid payment method. Only M-Pesa is supported.');
       }
 
     } catch (error) {

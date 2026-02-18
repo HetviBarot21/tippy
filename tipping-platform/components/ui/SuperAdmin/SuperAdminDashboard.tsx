@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RestaurantManagement } from './RestaurantManagement';
 import { SystemAnalytics } from './SystemAnalytics';
 import { TenantSupport } from './TenantSupport';
+import { PesaWiseWallet } from '../Admin/PesaWiseWallet';
 
 interface SuperAdminDashboardProps {
   stats: {
@@ -37,19 +38,30 @@ export function SuperAdminDashboard({
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
-            <p className="text-gray-600">Manage all restaurants and system-wide settings</p>
+            <h1 className="text-3xl font-bold text-black">Super Admin Dashboard</h1>
+            <p className="text-gray-700">Manage all restaurants and system-wide settings</p>
           </div>
-          <Badge variant="secondary" className="text-sm">
-            {userEmail}
-          </Badge>
+          <div className="flex items-center space-x-4">
+            <Badge variant="secondary" className="text-sm">
+              {userEmail}
+            </Badge>
+            <Button 
+              variant="outline" 
+              onClick={() => window.location.href = '/admin'}
+              className="text-black"
+            >
+              ← Back
+            </Button>
+          </div>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="wallet">Wallet</TabsTrigger>
           <TabsTrigger value="restaurants">Restaurants</TabsTrigger>
+          <TabsTrigger value="payouts">Payouts</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="support">Support</TabsTrigger>
         </TabsList>
@@ -81,10 +93,58 @@ export function SuperAdminDashboard({
               trend="neutral"
             />
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-black">Quick Actions</CardTitle>
+              <CardDescription className="text-gray-700">Common administrative tasks</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button 
+                className="w-full justify-start text-black" 
+                variant="outline"
+                onClick={() => setActiveTab('wallet')}
+              >
+                View PesaWise Wallet
+              </Button>
+              <Button 
+                className="w-full justify-start text-black" 
+                variant="outline"
+                onClick={() => window.location.href = '/admin/payouts'}
+              >
+                Manage Payouts
+              </Button>
+              <Button 
+                className="w-full justify-start text-black" 
+                variant="outline"
+                onClick={() => setActiveTab('restaurants')}
+              >
+                Manage Restaurants
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="wallet">
+          <PesaWiseWallet />
         </TabsContent>
 
         <TabsContent value="restaurants">
           <RestaurantManagement restaurants={restaurants} />
+        </TabsContent>
+
+        <TabsContent value="payouts">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-black">Payout Management</CardTitle>
+              <CardDescription className="text-gray-700">Process waiter payouts via PesaWise</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="text-white" onClick={() => window.location.href = '/admin/payouts'}>
+                Go to Payout Management
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="analytics">
@@ -116,10 +176,10 @@ function StatsCard({ title, value, subtitle, trend }: StatsCardProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium text-gray-700">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold text-gray-900">{value}</div>
+        <div className="text-2xl font-bold text-black">{value}</div>
         <p className={`text-xs ${trendColors[trend]} mt-1`}>{subtitle}</p>
       </CardContent>
     </Card>
