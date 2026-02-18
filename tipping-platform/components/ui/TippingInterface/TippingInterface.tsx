@@ -24,20 +24,15 @@ interface TippingInterfaceProps {
   waiters: Waiter[];
 }
 
-type TipStep = 'loading' | 'table-selection' | 'tip-type' | 'waiter-selection' | 'amount-entry' | 'confirmation' | 'payment' | 'success';
+type TipStep = 'loading' | 'tip-type' | 'waiter-selection' | 'amount-entry' | 'confirmation' | 'payment' | 'success';
 
 export default function TippingInterface({ restaurant, table, waiters }: TippingInterfaceProps) {
-  const [currentStep, setCurrentStep] = useState<TipStep>(table ? 'tip-type' : 'table-selection');
-  const [selectedTable, setSelectedTable] = useState<string>('');
+  const [currentStep, setCurrentStep] = useState<TipStep>('tip-type');
   const [tipType, setTipType] = useState<'waiter' | 'restaurant' | null>(null);
   const [selectedWaiter, setSelectedWaiter] = useState<Waiter | null>(null);
   const [tipAmount, setTipAmount] = useState<number>(0);
   const [transactionId, setTransactionId] = useState<string>('');
 
-  const handleTableSelect = (tableNumber: string) => {
-    setSelectedTable(tableNumber);
-    setCurrentStep('tip-type');
-  };
   const handleTipTypeSelect = (type: 'waiter' | 'restaurant') => {
     setTipType(type);
     if (type === 'restaurant') {
@@ -78,12 +73,6 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
 
   const handleBack = () => {
     switch (currentStep) {
-      case 'tip-type':
-        if (!table) {
-          setCurrentStep('table-selection');
-          setSelectedTable('');
-        }
-        break;
       case 'waiter-selection':
         setCurrentStep('tip-type');
         setTipType(null);
@@ -120,16 +109,16 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-white mb-2">{restaurant.name}</h1>
-          {(table || selectedTable) && (
+          {table && (
             <p className="text-zinc-400">
-              Table {table?.number || selectedTable}
-              {table?.name && ` - ${table.name}`}
+              Table {table.number}
+              {table.name && ` - ${table.name}`}
             </p>
           )}
         </div>
 
         {/* Back Button */}
-        {currentStep !== 'table-selection' && currentStep !== 'tip-type' && (
+        {currentStep !== 'tip-type' && (
           <button
             onClick={handleBack}
             className="mb-6 flex items-center text-zinc-400 hover:text-white transition-colors"
@@ -142,25 +131,6 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
         )}
 
         {/* Step Content */}
-        {currentStep === 'table-selection' && (
-          <div className="bg-zinc-800 rounded-lg p-6 shadow-xl">
-            <h2 className="text-xl font-semibold text-white mb-4">Select Your Table</h2>
-            <input
-              type="text"
-              placeholder="Enter table number (e.g., 1, 2, 3...)"
-              value={selectedTable}
-              onChange={(e) => setSelectedTable(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-700 text-white rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={() => selectedTable && handleTableSelect(selectedTable)}
-              disabled={!selectedTable}
-              className="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Continue
-            </button>
-          </div>
-        )}
         {currentStep === 'tip-type' && (
           <TipTypeSelection onSelect={handleTipTypeSelect} />
         )}
@@ -188,7 +158,7 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
             selectedWaiter={selectedWaiter}
             restaurantName={restaurant.name}
             amount={tipAmount}
-            tableNumber={table?.number || selectedTable}
+            tableNumber={table?.number || ''}
             tableName={table?.name || null}
             onConfirm={handleTipConfirm}
             onEdit={handleEditAmount}
@@ -203,7 +173,7 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
             restaurantName={restaurant.name}
             amount={tipAmount}
             tableId={table?.id || null}
-            tableNumber={table?.number || selectedTable}
+            tableNumber={table?.number || ''}
             tableName={table?.name || null}
             onSuccess={handlePaymentSuccess}
             onError={handlePaymentError}
@@ -227,8 +197,7 @@ export default function TippingInterface({ restaurant, table, waiters }: Tipping
             </div>
             <button
               onClick={() => {
-                setCurrentStep(table ? 'tip-type' : 'table-selection');
-                setSelectedTable('');
+                setCurrentStep('tip-type');
                 setTipType(null);
                 setSelectedWaiter(null);
                 setTipAmount(0);

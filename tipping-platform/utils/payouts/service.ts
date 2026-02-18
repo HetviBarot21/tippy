@@ -73,6 +73,7 @@ export class PayoutService {
 
   /**
    * Calculate individual waiter payouts for the month
+   * Direct waiter tips go directly to the waiter (not divided by groups)
    */
   private async calculateWaiterPayouts(
     restaurantId: string, 
@@ -149,6 +150,7 @@ export class PayoutService {
 
   /**
    * Calculate distribution group payouts from restaurant-wide tips
+   * Each group gets their percentage, then it's divided equally among all members in that group
    */
   private async calculateGroupPayouts(
     restaurantId: string,
@@ -163,6 +165,7 @@ export class PayoutService {
         group_name,
         percentage,
         amount,
+        distribution_group_id,
         tips!inner(
           id,
           amount,
@@ -182,8 +185,29 @@ export class PayoutService {
       throw new Error('Failed to fetch tip distributions');
     }
 
+    // Get all active waiters with their distribution groups
+    const { data: allWaiters, error: waitersError } = await this.supabase
+      .from('waiters')
+      .select(`
+        id,
+        name,
+        phone_number,
+        distribution_group_id,
+        distribution_groups(id, group_name, percentage)
+      `)
+      .eq('restaurant_id', restaurantId)
+      .eq('is_active', true)
+      .not('distribution_group_id', 'is', null);
+
+    if (waitersError) {
+      console.error('Error fetching waiters:', waitersError);
+      throw new Error('Failed to fetch waiters');
+    }
+
     // Group by distribution group and calculate totals
     const groupTotals = new Map<string, {
+      groupId: string;
+      groupName: string;
       percentage: number;
       totalTips: number;
       commissionAmount: number;
@@ -191,8 +215,10 @@ export class PayoutService {
     }>();
 
     (distributions || []).forEach((dist: any) => {
-      const groupName = dist.group_name;
-      const existing = groupTotals.get(groupName);
+      const groupId = dist.distribution_group_id;
+      if (!groupId) return;
+
+      const existing = groupTotals.get(groupId);
       
       // Calculate commission proportionally for this distribution
       const tipCommission = dist.tips.commission_amount;
@@ -203,7 +229,9 @@ export class PayoutService {
         existing.commissionAmount += distributionCommission;
         existing.netAmount += dist.amount;
       } else {
-        groupTotals.set(groupName, {
+        groupTotals.set(groupId, {
+          groupId: groupId,
+          groupName: dist.group_name,
           percentage: dist.percentage,
           totalTips: (dist.tips.amount * dist.percentage) / 100,
           commissionAmount: distributionCommission,
@@ -212,16 +240,49 @@ export class PayoutService {
       }
     });
 
-    // Convert to payout calculations
-    const payouts: GroupPayoutCalculation[] = Array.from(groupTotals.entries()).map(([groupName, totals]) => ({
-      group_name: groupName,
-      percentage: totals.percentage,
-      total_tips: totals.totalTips,
-      commission_amount: totals.commissionAmount,
-      net_amount: totals.netAmount,
-      recipient_account: null, // Will be set when configuring bank accounts
-      meets_minimum: totals.netAmount >= minimumThreshold
-    }));
+    const payouts: GroupPayoutCalculation[] = [];
+
+    // For each group, divide the total among all active members
+    groupTotals.forEach((groupData) => {
+      // Get all active waiters in this group
+      const groupMembers = (allWaiters || []).filter(
+        (w: any) => w.distribution_group_id === groupData.groupId
+      );
+
+      const memberCount = groupMembers.length;
+      
+      if (memberCount > 0) {
+        // Divide the group's total equally among all members
+        const amountPerMember = groupData.netAmount / memberCount;
+        const tipsPerMember = groupData.totalTips / memberCount;
+        const commissionPerMember = groupData.commissionAmount / memberCount;
+
+        groupMembers.forEach((member: any) => {
+          payouts.push({
+            group_name: `${groupData.groupName} - ${member.name}`,
+            percentage: groupData.percentage,
+            total_tips: tipsPerMember,
+            commission_amount: commissionPerMember,
+            net_amount: amountPerMember,
+            recipient_account: member.phone_number,
+            meets_minimum: amountPerMember >= minimumThreshold,
+            waiter_id: member.id,
+            waiter_name: member.name
+          });
+        });
+      } else {
+        // No members in group - create a single payout record for the group
+        payouts.push({
+          group_name: groupData.groupName,
+          percentage: groupData.percentage,
+          total_tips: groupData.totalTips,
+          commission_amount: groupData.commissionAmount,
+          net_amount: groupData.netAmount,
+          recipient_account: null,
+          meets_minimum: groupData.netAmount >= minimumThreshold
+        });
+      }
+    });
 
     return payouts;
   }
@@ -273,13 +334,13 @@ export class PayoutService {
         if (groupPayout.meets_minimum) {
           const payoutData: PayoutInsert = {
             restaurant_id: restaurantId,
-            waiter_id: null,
+            waiter_id: groupPayout.waiter_id || null, // If divided among members, link to waiter
             payout_type: 'group',
             group_name: groupPayout.group_name,
             amount: groupPayout.net_amount,
             payout_month: month,
             status: 'pending',
-            recipient_phone: null,
+            recipient_phone: groupPayout.recipient_account || null, // Phone number if divided among members
             recipient_account: groupPayout.recipient_account
           };
 

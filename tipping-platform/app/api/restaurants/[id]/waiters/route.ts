@@ -18,6 +18,11 @@ export async function GET(
       .from('waiters')
       .select(`
         *,
+        distribution_group:distribution_groups(
+          id,
+          group_name,
+          percentage
+        ),
         tips!inner(
           id,
           amount,
@@ -87,7 +92,7 @@ export async function POST(
     const context = await validateApiTenantAccess(request, restaurantId);
     const { supabase } = context;
     
-    const { name, phone_number, email, profile_photo_url } = body;
+    const { name, phone_number, email, profile_photo_url, distribution_group_id } = body;
 
     // Validate required fields
     if (!name || !phone_number) {
@@ -95,6 +100,23 @@ export async function POST(
         { error: 'Name and phone number are required' },
         { status: 400 }
       );
+    }
+
+    // Validate distribution group if provided
+    if (distribution_group_id) {
+      const { data: groupExists } = await supabase
+        .from('distribution_groups')
+        .select('id')
+        .eq('id', distribution_group_id)
+        .eq('restaurant_id', restaurantId)
+        .single();
+
+      if (!groupExists) {
+        return NextResponse.json(
+          { error: 'Invalid distribution group' },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate phone number format (Kenyan format)
@@ -130,6 +152,7 @@ export async function POST(
         phone_number,
         email: email || null,
         profile_photo_url: profile_photo_url || null,
+        distribution_group_id: distribution_group_id || null,
         is_active: true
       })
       .select()

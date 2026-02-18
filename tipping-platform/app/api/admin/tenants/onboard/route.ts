@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create admin user in Supabase Auth
+    // Create admin user in Supabase Auth and send password reset email
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: adminEmail,
       email_confirm: true,
@@ -85,6 +85,16 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to create admin user' },
         { status: 500 }
       );
+    }
+
+    // Send password reset email to the new admin
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(adminEmail, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/reset_password`
+    });
+
+    if (resetError) {
+      console.error('Error sending password reset email:', resetError);
+      // Don't fail the whole operation, just log it
     }
 
     // Link admin user to restaurant
@@ -128,7 +138,8 @@ export async function POST(request: NextRequest) {
       adminUser: {
         id: authData.user.id,
         email: authData.user.email
-      }
+      },
+      message: 'Restaurant created successfully. Password reset email sent to admin.'
     });
 
   } catch (error) {

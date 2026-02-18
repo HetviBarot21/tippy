@@ -44,6 +44,9 @@ export async function PUT(
       );
     }
 
+    console.log('Updating distribution groups for restaurant:', restaurantId);
+    console.log('Groups received:', JSON.stringify(groups, null, 2));
+
     const updatedGroups = await distributionService.updateDistributionGroups(restaurantId, groups);
     
     return NextResponse.json({
@@ -54,10 +57,11 @@ export async function PUT(
 
   } catch (error) {
     console.error('Error updating distribution groups:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update distribution groups';
     return NextResponse.json(
       { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Failed to update distribution groups' 
+        error: errorMessage
       },
       { status: 400 }
     );

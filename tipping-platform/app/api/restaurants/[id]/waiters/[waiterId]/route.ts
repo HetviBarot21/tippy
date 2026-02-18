@@ -101,7 +101,7 @@ export async function PUT(
     const waiterId = params.waiterId;
     const body = await request.json();
     
-    const { name, phone_number, email, profile_photo_url, is_active } = body;
+    const { name, phone_number, email, profile_photo_url, is_active, distribution_group_id } = body;
 
     // Validate required fields
     if (!name || !phone_number) {
@@ -109,6 +109,25 @@ export async function PUT(
         { error: 'Name and phone number are required' },
         { status: 400 }
       );
+    }
+
+    const supabase = createClient();
+
+    // Validate distribution group if provided
+    if (distribution_group_id) {
+      const { data: groupExists } = await supabase
+        .from('distribution_groups')
+        .select('id')
+        .eq('id', distribution_group_id)
+        .eq('restaurant_id', restaurantId)
+        .single();
+
+      if (!groupExists) {
+        return NextResponse.json(
+          { error: 'Invalid distribution group' },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate phone number format (Kenyan format)
@@ -119,8 +138,6 @@ export async function PUT(
         { status: 400 }
       );
     }
-
-    const supabase = createClient();
 
     // Check if phone number already exists for another waiter in this restaurant
     const { data: existingWaiter } = await supabase
@@ -139,16 +156,23 @@ export async function PUT(
     }
 
     // Update waiter
+    const updateData: any = {
+      name,
+      phone_number,
+      email: email || null,
+      profile_photo_url: profile_photo_url || null,
+      is_active: is_active !== undefined ? is_active : true,
+      updated_at: new Date().toISOString()
+    };
+
+    // Only update distribution_group_id if it's provided in the request
+    if (distribution_group_id !== undefined) {
+      updateData.distribution_group_id = distribution_group_id || null;
+    }
+
     const { data: waiter, error } = await supabase
       .from('waiters')
-      .update({
-        name,
-        phone_number,
-        email: email || null,
-        profile_photo_url: profile_photo_url || null,
-        is_active: is_active !== undefined ? is_active : true,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', waiterId)
       .eq('restaurant_id', restaurantId)
       .select()

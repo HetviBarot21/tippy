@@ -199,17 +199,25 @@ export class DistributionService {
    */
   async createTipDistribution(tipId: string, restaurantId: string, netAmount: number): Promise<TipDistribution[]> {
     try {
-      // Calculate distribution based on current groups
-      const { distributions } = await this.calculateTipDistribution(restaurantId, netAmount);
+      // Get distribution groups with their IDs
+      const groups = await this.getDistributionGroups(restaurantId);
+      
+      if (groups.length === 0) {
+        throw new Error('No distribution groups configured for restaurant');
+      }
 
-      // Create distribution records
-      const distributionInserts: TipDistributionInsert[] = distributions.map(dist => ({
-        tip_id: tipId,
-        restaurant_id: restaurantId,
-        group_name: dist.groupName,
-        percentage: dist.percentage,
-        amount: dist.amount
-      }));
+      // Calculate distribution based on current groups
+      const distributionInserts: TipDistributionInsert[] = groups.map(group => {
+        const amount = Math.round((netAmount * group.percentage / 100) * 100) / 100;
+        return {
+          tip_id: tipId,
+          restaurant_id: restaurantId,
+          distribution_group_id: group.id,
+          group_name: group.group_name,
+          percentage: group.percentage,
+          amount: amount
+        };
+      });
 
       const { data: tipDistributions, error } = await (this.supabase as any)
         .from('tip_distributions')

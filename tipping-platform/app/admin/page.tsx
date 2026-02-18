@@ -54,7 +54,8 @@ export default async function AdminPage() {
     { data: totalTips },
     { data: totalCommissions },
     { data: activeWaiters },
-    { data: recentActivity }
+    { data: recentActivity },
+    { data: allTips }
   ] = await Promise.all([
     // Total restaurants
     supabase
@@ -89,8 +90,28 @@ export default async function AdminPage() {
         restaurant:restaurants(name)
       `)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(20),
+    
+    // All tips this month by restaurant
+    supabase
+      .from('tips')
+      .select('restaurant_id, commission_amount, created_at')
+      .eq('payment_status', 'completed')
+      .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
   ]);
+
+  // Calculate commission per restaurant this month
+  const restaurantCommissions = new Map<string, number>();
+  allTips?.forEach(tip => {
+    const current = restaurantCommissions.get(tip.restaurant_id) || 0;
+    restaurantCommissions.set(tip.restaurant_id, current + tip.commission_amount);
+  });
+
+  // Add commission data to restaurants
+  const restaurantsWithCommission = restaurants?.map(r => ({
+    ...r,
+    commissionThisMonth: restaurantCommissions.get(r.id) || 0
+  })) || [];
 
   console.log('Restaurants fetched:', restaurants?.length, 'Error:', restaurantsError);
   console.log('First 3 restaurants:', restaurants?.slice(0, 3));
@@ -109,7 +130,7 @@ export default async function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <SuperAdminDashboard 
         stats={stats}
-        restaurants={restaurants || []}
+        restaurants={restaurantsWithCommission}
         recentActivity={recentActivity || []}
         userEmail={user.email || ''}
       />

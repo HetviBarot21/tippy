@@ -16,6 +16,7 @@ interface Restaurant {
   is_active: boolean;
   commission_rate: number;
   created_at: string;
+  commissionThisMonth?: number;
 }
 
 interface RestaurantManagementProps {
@@ -185,13 +186,18 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
             {restaurant.is_active ? 'Active' : 'Inactive'}
           </Badge>
         </div>
-        <CardDescription className="text-gray-700">
-          Slug: {restaurant.slug}
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="text-sm text-gray-700">
           Created: {new Date(restaurant.created_at).toLocaleDateString()}
+        </div>
+
+        {/* Commission This Month */}
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="text-xs text-green-700 font-medium mb-1">Commission This Month</div>
+          <div className="text-xl font-bold text-green-600">
+            KES {(restaurant.commissionThisMonth || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
         </div>
 
         {/* Commission Rate */}

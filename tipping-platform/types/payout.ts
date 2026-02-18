@@ -114,6 +114,8 @@ export interface GroupPayoutCalculation {
   net_amount: number;
   recipient_account: string | null;
   meets_minimum: boolean;
+  waiter_id?: string; // Optional: when divided among group members
+  waiter_name?: string; // Optional: when divided among group members
 }
 
 // Payout notification interfaces

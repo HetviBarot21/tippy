@@ -17,6 +17,12 @@ interface Waiter {
   profile_photo_url?: string;
   is_active: boolean;
   created_at: string;
+  distribution_group_id?: string;
+  distribution_group?: {
+    id: string;
+    group_name: string;
+    percentage: number;
+  };
   stats: {
     totalTips: number;
     totalAmount: number;
@@ -31,6 +37,7 @@ interface Props {
 
 export function WaiterManagementDashboard({ restaurantId }: Props) {
   const [waiters, setWaiters] = useState<Waiter[]>([]);
+  const [distributionGroups, setDistributionGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showInactive, setShowInactive] = useState(false);
@@ -40,9 +47,22 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
     name: '',
     phone_number: '',
     email: '',
-    profile_photo_url: ''
+    profile_photo_url: '',
+    distribution_group_id: ''
   });
   const [formLoading, setFormLoading] = useState(false);
+
+  const fetchDistributionGroups = async () => {
+    try {
+      const response = await fetch(`/api/restaurants/${restaurantId}/distribution`);
+      const data = await response.json();
+      if (data.success) {
+        setDistributionGroups(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching distribution groups:', error);
+    }
+  };
 
   const fetchWaiters = async () => {
     try {
@@ -63,6 +83,7 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
   };
 
   useEffect(() => {
+    fetchDistributionGroups();
     fetchWaiters();
   }, [restaurantId, showInactive]);
 
@@ -82,7 +103,7 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
       }
 
       setIsCreateModalOpen(false);
-      setFormData({ name: '', phone_number: '', email: '', profile_photo_url: '' });
+      setFormData({ name: '', phone_number: '', email: '', profile_photo_url: '', distribution_group_id: '' });
       fetchWaiters();
     } catch (error) {
       console.error('Error creating waiter:', error);
@@ -113,7 +134,7 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
       }
 
       setEditingWaiter(null);
-      setFormData({ name: '', phone_number: '', email: '', profile_photo_url: '' });
+      setFormData({ name: '', phone_number: '', email: '', profile_photo_url: '', distribution_group_id: '' });
       fetchWaiters();
     } catch (error) {
       console.error('Error updating waiter:', error);
@@ -149,7 +170,8 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
       name: waiter.name,
       phone_number: waiter.phone_number,
       email: waiter.email || '',
-      profile_photo_url: waiter.profile_photo_url || ''
+      profile_photo_url: waiter.profile_photo_url || '',
+      distribution_group_id: (waiter as any).distribution_group_id || ''
     });
   };
 
@@ -231,6 +253,26 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="bg-zinc-800 border-zinc-600"
                 />
+              </div>
+              <div>
+                <Label htmlFor="distribution_group">Distribution Group *</Label>
+                <select
+                  id="distribution_group"
+                  value={formData.distribution_group_id}
+                  onChange={(e) => setFormData({ ...formData, distribution_group_id: e.target.value })}
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select a group...</option>
+                  {distributionGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.group_name} ({group.percentage}%)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-zinc-400 mt-1">
+                  This determines how tips are distributed to this staff member
+                </p>
               </div>
               <div>
                 <Label htmlFor="photo">Profile Photo URL</Label>
@@ -335,6 +377,22 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
                 </div>
               )}
               
+              {waiter.distribution_group && (
+                <div className="flex items-center space-x-2 text-sm">
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30">
+                    {waiter.distribution_group.group_name} ({waiter.distribution_group.percentage}%)
+                  </Badge>
+                </div>
+              )}
+              
+              {!waiter.distribution_group && (
+                <div className="flex items-center space-x-2 text-sm">
+                  <Badge variant="outline" className="bg-yellow-500/10 text-yellow-400 border-yellow-500/30">
+                    No group assigned
+                  </Badge>
+                </div>
+              )}
+              
               {/* Performance Stats */}
               <div className="pt-3 border-t border-zinc-700">
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -411,6 +469,22 @@ export function WaiterManagementDashboard({ restaurantId }: Props) {
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="bg-zinc-800 border-zinc-600"
               />
+            </div>
+            <div>
+              <Label htmlFor="edit-distribution_group">Distribution Group</Label>
+              <select
+                id="edit-distribution_group"
+                value={formData.distribution_group_id}
+                onChange={(e) => setFormData({ ...formData, distribution_group_id: e.target.value })}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">No group assigned</option>
+                {distributionGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.group_name} ({group.percentage}%)
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <Label htmlFor="edit-photo">Profile Photo URL</Label>

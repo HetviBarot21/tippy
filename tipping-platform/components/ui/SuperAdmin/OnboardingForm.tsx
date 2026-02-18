@@ -12,6 +12,8 @@ interface OnboardingFormProps {
 
 export function OnboardingForm({ onSuccess }: OnboardingFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
   const [formData, setFormData] = useState({
     restaurantName: '',
     restaurantSlug: '',
@@ -77,8 +79,63 @@ export function OnboardingForm({ onSuccess }: OnboardingFormProps) {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };  const 
-handleSubmit = async (e: React.FormEvent) => {
+  };
+
+  // If success, show confirmation
+  if (showSuccess) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-green-50 border-2 border-green-500 rounded-lg p-6">
+          <div className="flex items-center mb-4">
+            <svg className="w-6 h-6 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <h3 className="text-lg font-semibold text-green-900">Restaurant Created Successfully!</h3>
+          </div>
+          
+          <div className="bg-white rounded-lg p-4 mb-4">
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <svg className="w-5 h-5 text-blue-600 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Password reset email sent</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    A password setup link has been sent to <span className="font-mono font-semibold">{adminEmail}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-4">
+            <p className="text-sm text-blue-900 font-medium mb-2">
+              What happens next:
+            </p>
+            <ol className="text-sm text-blue-800 list-decimal list-inside space-y-1">
+              <li>Restaurant admin checks their email ({adminEmail})</li>
+              <li>They click the "Set Password" link in the email</li>
+              <li>They create their own secure password</li>
+              <li>They can then login at: <span className="font-mono">http://localhost:3000/signin</span></li>
+            </ol>
+          </div>
+
+          <Button
+            onClick={() => {
+              onSuccess();
+              window.location.reload();
+            }}
+            className="w-full"
+          >
+            Done
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -99,9 +156,8 @@ handleSubmit = async (e: React.FormEvent) => {
       const result = await response.json();
 
       if (response.ok) {
-        alert('Restaurant onboarded successfully!');
-        onSuccess();
-        window.location.reload(); // Simple refresh for now
+        setAdminEmail(result.adminUser.email);
+        setShowSuccess(true);
       } else {
         setErrors({ submit: result.error || 'Failed to onboard restaurant' });
       }
@@ -117,12 +173,13 @@ handleSubmit = async (e: React.FormEvent) => {
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="restaurantName">Restaurant Name *</Label>
+          <Label htmlFor="restaurantName" className="text-gray-900">Restaurant Name *</Label>
           <Input
             id="restaurantName"
             value={formData.restaurantName}
             onChange={(e) => handleInputChange('restaurantName', e.target.value)}
             placeholder="e.g., Java House"
+            className="text-gray-900 bg-white"
           />
           {errors.restaurantName && (
             <p className="text-sm text-red-600">{errors.restaurantName}</p>
@@ -130,12 +187,13 @@ handleSubmit = async (e: React.FormEvent) => {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="restaurantSlug">Restaurant Slug *</Label>
+          <Label htmlFor="restaurantSlug" className="text-gray-900">Restaurant Slug *</Label>
           <Input
             id="restaurantSlug"
             value={formData.restaurantSlug}
             onChange={(e) => handleInputChange('restaurantSlug', e.target.value)}
             placeholder="e.g., java-house"
+            className="text-gray-900 bg-white"
           />
           {errors.restaurantSlug && (
             <p className="text-sm text-red-600">{errors.restaurantSlug}</p>
@@ -143,13 +201,14 @@ handleSubmit = async (e: React.FormEvent) => {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">Restaurant Email *</Label>
+          <Label htmlFor="email" className="text-gray-900">Restaurant Email *</Label>
           <Input
             id="email"
             type="email"
             value={formData.email}
             onChange={(e) => handleInputChange('email', e.target.value)}
             placeholder="contact@restaurant.com"
+            className="text-gray-900 bg-white"
           />
           {errors.email && (
             <p className="text-sm text-red-600">{errors.email}</p>
@@ -157,37 +216,40 @@ handleSubmit = async (e: React.FormEvent) => {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="phoneNumber">Phone Number</Label>
+          <Label htmlFor="phoneNumber" className="text-gray-900">Phone Number</Label>
           <Input
             id="phoneNumber"
             value={formData.phoneNumber}
             onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
             placeholder="+254712345678"
+            className="text-gray-900 bg-white"
           />
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="address">Address</Label>
+        <Label htmlFor="address" className="text-gray-900">Address</Label>
         <Input
           id="address"
           value={formData.address}
           onChange={(e) => handleInputChange('address', e.target.value)}
           placeholder="Restaurant address"
+          className="text-gray-900 bg-white"
         />
       </div>
 
-      <Card>
+      <Card className="bg-gray-50">
         <CardContent className="pt-6">
-          <h3 className="text-lg font-medium mb-4">Admin User Details</h3>
+          <h3 className="text-lg font-medium mb-4 text-gray-900">Admin User Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="adminName">Admin Name *</Label>
+              <Label htmlFor="adminName" className="text-gray-900">Admin Name *</Label>
               <Input
                 id="adminName"
                 value={formData.adminName}
                 onChange={(e) => handleInputChange('adminName', e.target.value)}
                 placeholder="John Doe"
+                className="text-gray-900 bg-white"
               />
               {errors.adminName && (
                 <p className="text-sm text-red-600">{errors.adminName}</p>
@@ -195,13 +257,14 @@ handleSubmit = async (e: React.FormEvent) => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="adminEmail">Admin Email *</Label>
+              <Label htmlFor="adminEmail" className="text-gray-900">Admin Email *</Label>
               <Input
                 id="adminEmail"
                 type="email"
                 value={formData.adminEmail}
                 onChange={(e) => handleInputChange('adminEmail', e.target.value)}
                 placeholder="admin@restaurant.com"
+                className="text-gray-900 bg-white"
               />
               {errors.adminEmail && (
                 <p className="text-sm text-red-600">{errors.adminEmail}</p>
@@ -212,7 +275,7 @@ handleSubmit = async (e: React.FormEvent) => {
       </Card>
 
       <div className="space-y-2">
-        <Label htmlFor="commissionRate">Commission Rate (%)</Label>
+        <Label htmlFor="commissionRate" className="text-gray-900">Commission Rate (%)</Label>
         <Input
           id="commissionRate"
           type="number"
@@ -221,6 +284,7 @@ handleSubmit = async (e: React.FormEvent) => {
           step="0.1"
           value={formData.commissionRate}
           onChange={(e) => handleInputChange('commissionRate', parseFloat(e.target.value) || 0)}
+          className="text-gray-900 bg-white"
         />
         {errors.commissionRate && (
           <p className="text-sm text-red-600">{errors.commissionRate}</p>
@@ -234,10 +298,10 @@ handleSubmit = async (e: React.FormEvent) => {
       )}
 
       <div className="flex justify-end space-x-3">
-        <Button type="button" variant="outline" onClick={onSuccess}>
+        <Button type="button" variant="outline" onClick={onSuccess} className="text-gray-900 border-gray-300 hover:bg-gray-100">
           Cancel
         </Button>
-        <Button type="submit" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
           {isLoading ? 'Creating...' : 'Create Restaurant'}
         </Button>
       </div>
