@@ -5,10 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RestaurantManagement } from './RestaurantManagement';
 import { SystemAnalytics } from './SystemAnalytics';
 import { TenantSupport } from './TenantSupport';
 import { PesaWiseWallet } from '../Admin/PesaWiseWallet';
+import { OnboardingForm } from './OnboardingForm';
 
 interface SuperAdminDashboardProps {
   stats: {
@@ -32,6 +34,7 @@ export function SuperAdminDashboard({
   userEmail 
 }: SuperAdminDashboardProps) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -99,7 +102,7 @@ export function SuperAdminDashboard({
               <CardTitle className="text-black">Quick Actions</CardTitle>
               <CardDescription className="text-gray-700">Common administrative tasks</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-2 relative pb-16">
               <Button 
                 className="w-full justify-start text-black" 
                 variant="outline"
@@ -119,10 +122,35 @@ export function SuperAdminDashboard({
                 variant="outline"
                 onClick={() => setActiveTab('restaurants')}
               >
-                Manage Restaurants
+                View All Restaurants
               </Button>
+              
+              {/* Add Restaurant Button - Bottom Right */}
+              <button
+                onClick={() => setShowOnboarding(true)}
+                className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 shadow-lg transition-all duration-200 hover:scale-105 flex items-center gap-2 text-sm font-medium"
+                title="Add New Restaurant"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Restaurant
+              </button>
             </CardContent>
           </Card>
+
+          {/* Add Restaurant Dialog */}
+          <Dialog open={showOnboarding} onOpenChange={setShowOnboarding}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
+              <DialogHeader>
+                <DialogTitle className="text-black">Add New Restaurant</DialogTitle>
+                <DialogDescription className="text-gray-700">
+                  Onboard a new restaurant to the Tippy platform
+                </DialogDescription>
+              </DialogHeader>
+              <OnboardingForm onSuccess={() => setShowOnboarding(false)} />
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="wallet">

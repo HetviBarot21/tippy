@@ -1,30 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/utils/supabase/tenant-client';
-import { z } from 'zod';
-
-const onboardingSchema = z.object({
-  restaurantName: z.string().min(1, 'Restaurant name is required'),
-  restaurantSlug: z.string().min(1, 'Restaurant slug is required').regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
-  email: z.string().email('Valid email is required'),
-  phoneNumber: z.string().optional(),
-  address: z.string().optional(),
-  adminEmail: z.string().email('Admin email is required'),
-  adminName: z.string().min(1, 'Admin name is required'),
-  commissionRate: z.number().min(0).max(100).default(10),
-});
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const validatedData = onboardingSchema.parse(body);
+    const {
+      restaurantName,
+      restaurantSlug,
+      email,
+      phoneNumber,
+      address,
+      adminEmail,
+      adminName,
+      commissionRate
+    } = body;
 
-    const supabase = createServiceClient();
+    // Validate required fields
+    if (!restaurantName || !restaurantSlug || !email || !adminEmail || !adminName) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
 
-    // Check if restaurant slug already exists
+    // Use service role client to bypass RLS
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    // Check if slug already exists
     const { data: existingRestaurant } = await supabase
       .from('restaurants')
       .select('id')
-      .eq('slug', validatedData.restaurantSlug)
+      .eq('slug', restaurantSlug)
       .single();
 
     if (existingRestaurant) {
@@ -34,16 +43,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Start transaction by creating restaurant
+    // Create restaurant
     const { data: restaurant, error: restaurantError } = await supabase
       .from('restaurants')
       .insert({
-        name: validatedData.restaurantName,
-        slug: validatedData.restaurantSlug,
-        email: validatedData.email,
-        phone_number: validatedData.phoneNumber,
-        address: validatedData.address,
-        commission_rate: validatedData.commissionRate,
+        name: restaurantName,
+        slug: restaurantSlug,
+        email: email,
+        phone_number: phoneNumber || null,
+        address: address || null,
+        commission_rate: commissionRate || 10,
         is_active: true
       })
       .select()
@@ -57,68 +66,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create or find admin user
-    let adminUserId: string;
-
-    // Check if admin user already exists
-    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(validatedData.adminEmail);
-
-    if (existingUser.user) {
-      adminUserId = existingUser.user.id;
-    } else {
-      // Create new admin user
-      const { data: newUser, error: userError } = await supabase.auth.admin.createUser({
-        email: validatedData.adminEmail,
-        email_confirm: true,
-        user_metadata: {
-          name: validatedData.adminName,
-          role: 'restaurant_admin'
-        }
-      });
-
-      if (userError || !newUser.user) {
-        console.error('Error creating admin user:', userError);
-        
-        // Cleanup: delete the restaurant
-        await supabase.from('restaurants').delete().eq('id', restaurant.id);
-        
-        return NextResponse.json(
-          { error: 'Failed to create admin user' },
-          { status: 500 }
-        );
-      }
-
-      adminUserId = newUser.user.id;
-    }
-
-    // Create restaurant admin record
-    const { error: adminError } = await supabase
-      .from('restaurant_admins')
-      .insert({
-        user_id: adminUserId,
+    // Create admin user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: adminEmail,
+      email_confirm: true,
+      user_metadata: {
+        name: adminName,
         restaurant_id: restaurant.id,
-        role: 'admin',
-        is_active: true
-      });
+        role: 'restaurant_admin'
+      }
+    });
 
-    if (adminError) {
-      console.error('Error creating restaurant admin:', adminError);
-      
-      // Cleanup: delete the restaurant
+    if (authError) {
+      console.error('Error creating admin user:', authError);
+      // Rollback restaurant creation
       await supabase.from('restaurants').delete().eq('id', restaurant.id);
-      
       return NextResponse.json(
-        { error: 'Failed to create restaurant admin' },
+        { error: 'Failed to create admin user' },
         { status: 500 }
       );
     }
 
+    // Link admin user to restaurant
+    const { error: adminLinkError } = await supabase
+      .from('restaurant_admins')
+      .insert({
+        restaurant_id: restaurant.id,
+        user_id: authData.user.id,
+        role: 'admin',
+        is_active: true
+      });
+
+    if (adminLinkError) {
+      console.error('Error linking admin to restaurant:', adminLinkError);
+    }
+
     // Create default distribution groups
     const defaultGroups = [
-      { group_name: 'cleaners', percentage: 10 },
-      { group_name: 'waiters', percentage: 30 },
-      { group_name: 'admin', percentage: 40 },
-      { group_name: 'owners', percentage: 20 }
+      { group_name: 'Waiters', percentage: 40 },
+      { group_name: 'Kitchen', percentage: 30 },
+      { group_name: 'Management', percentage: 20 },
+      { group_name: 'Support Staff', percentage: 10 }
     ];
 
     const { error: groupsError } = await supabase
@@ -126,52 +114,25 @@ export async function POST(request: NextRequest) {
       .insert(
         defaultGroups.map(group => ({
           restaurant_id: restaurant.id,
-          group_name: group.group_name,
-          percentage: group.percentage
+          ...group
         }))
       );
 
     if (groupsError) {
       console.error('Error creating distribution groups:', groupsError);
-      // Continue anyway, groups can be created later
     }
-
-    // Log the onboarding event
-    await supabase.from('audit_logs').insert({
-      user_id: adminUserId,
-      restaurant_id: restaurant.id,
-      table_name: 'restaurants',
-      action: 'onboard',
-      record_id: restaurant.id,
-      new_values: {
-        restaurant_name: restaurant.name,
-        admin_email: validatedData.adminEmail,
-        onboarded_at: new Date().toISOString()
-      }
-    });
 
     return NextResponse.json({
       success: true,
-      restaurant: {
-        id: restaurant.id,
-        name: restaurant.name,
-        slug: restaurant.slug,
-        email: restaurant.email
-      },
-      adminUserId,
-      message: 'Restaurant onboarded successfully'
+      restaurant: restaurant,
+      adminUser: {
+        id: authData.user.id,
+        email: authData.user.email
+      }
     });
 
   } catch (error) {
-    console.error('Onboarding error:', error);
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: error.errors },
-        { status: 400 }
-      );
-    }
-
+    console.error('Error in onboarding:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

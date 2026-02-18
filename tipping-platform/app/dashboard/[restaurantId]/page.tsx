@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { DistributionGroupManager } from '@/components/ui/DistributionManager';
 import { TipAnalyticsDashboard } from '@/components/ui/Analytics/TipAnalyticsDashboard';
 import { WaiterManagementDashboard } from '@/components/ui/WaiterManagement/WaiterManagementDashboard';
-import { EnhancedQRCodeManager } from '@/components/ui/QRCodeManager/EnhancedQRCodeManager';
+import { UniversalQRCode } from '@/components/ui/QRCodeManager/UniversalQRCode';
 
 interface Props {
   params: {
@@ -34,8 +35,14 @@ export default async function RestaurantDashboard({ params }: Props) {
     redirect('/unauthorized');
   }
   
+  // Use service role client to bypass RLS for restaurant data
+  const serviceClient = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  
   // Get restaurant data
-  const { data: restaurant, error: restaurantError } = await (supabase as any)
+  const { data: restaurant, error: restaurantError } = await serviceClient
     .from('restaurants')
     .select('*')
     .eq('id', params.restaurantId)
@@ -78,9 +85,9 @@ export default async function RestaurantDashboard({ params }: Props) {
 
           {/* QR Code Management */}
           <section>
-            <h2 className="text-2xl font-semibold mb-4">QR Code Management</h2>
-            <EnhancedQRCodeManager 
+            <UniversalQRCode 
               restaurantId={params.restaurantId}
+              restaurantSlug={restaurant.slug}
               restaurantName={restaurant.name}
             />
           </section>

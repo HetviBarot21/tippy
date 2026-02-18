@@ -36,26 +36,12 @@ export function RestaurantManagement({ restaurants }: RestaurantManagementProps)
   console.log('Filtered restaurants:', filteredRestaurants);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-black">Restaurant Management</h2>
           <p className="text-gray-700">Manage all restaurant tenants</p>
         </div>
-        <Dialog open={showOnboarding} onOpenChange={setShowOnboarding}>
-          <DialogTrigger asChild>
-            <Button className="text-white">Add New Restaurant</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle className="text-black">Onboard New Restaurant</DialogTitle>
-              <DialogDescription className="text-gray-700">
-                Add a new restaurant to the Tippy platform
-              </DialogDescription>
-            </DialogHeader>
-            <OnboardingForm onSuccess={() => setShowOnboarding(false)} />
-          </DialogContent>
-        </Dialog>
       </div>
 
       <div className="flex items-center space-x-4">
@@ -82,6 +68,30 @@ export function RestaurantManagement({ restaurants }: RestaurantManagementProps)
           <p className="text-black">No restaurants found matching your search.</p>
         </div>
       )}
+
+      {/* Floating Add Button */}
+      <button
+        onClick={() => setShowOnboarding(true)}
+        className="fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 z-50"
+        title="Add New Restaurant"
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+
+      {/* Add Restaurant Dialog */}
+      <Dialog open={showOnboarding} onOpenChange={setShowOnboarding}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-black">Onboard New Restaurant</DialogTitle>
+            <DialogDescription className="text-gray-700">
+              Add a new restaurant to the Tippy platform
+            </DialogDescription>
+          </DialogHeader>
+          <OnboardingForm onSuccess={() => setShowOnboarding(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -94,6 +104,7 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isEditingCommission, setIsEditingCommission] = useState(false);
   const [commissionRate, setCommissionRate] = useState(restaurant.commission_rate || 10);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleToggleStatus = async () => {
     setIsLoading(true);
@@ -134,6 +145,32 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
     } catch (error) {
       console.error('Error updating commission rate:', error);
       alert('Failed to update commission rate');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteRestaurant = async () => {
+    if (!confirm(`Are you sure you want to delete "${restaurant.name}"? This action cannot be undone and will delete all associated data.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/admin/restaurants/${restaurant.id}/delete`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        alert('Restaurant deleted successfully');
+        window.location.reload();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to delete restaurant');
+      }
+    } catch (error) {
+      console.error('Error deleting restaurant:', error);
+      alert('Failed to delete restaurant');
     } finally {
       setIsLoading(false);
     }
@@ -219,7 +256,7 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
             variant="outline"
             size="sm"
             onClick={() => window.open(`/dashboard/${restaurant.id}`, '_blank')}
-            className="text-black"
+            className="text-black flex-1"
           >
             View Dashboard
           </Button>
@@ -229,11 +266,21 @@ function RestaurantCard({ restaurant }: RestaurantCardProps) {
             size="sm"
             onClick={handleToggleStatus}
             disabled={isLoading}
-            className="text-white"
+            className="text-white flex-1"
           >
             {isLoading ? 'Loading...' : restaurant.is_active ? 'Deactivate' : 'Activate'}
           </Button>
         </div>
+
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={handleDeleteRestaurant}
+          disabled={isLoading}
+          className="w-full mt-2 text-white bg-red-600 hover:bg-red-700"
+        >
+          {isLoading ? 'Deleting...' : 'Delete Restaurant'}
+        </Button>
       </CardContent>
     </Card>
   );

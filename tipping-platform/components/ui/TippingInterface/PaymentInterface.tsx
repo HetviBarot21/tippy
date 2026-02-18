@@ -11,7 +11,7 @@ interface PaymentInterfaceProps {
   restaurantId: string;
   restaurantName: string;
   amount: number;
-  tableId: string;
+  tableId: string | null;
   tableNumber: string;
   tableName: string | null;
   onSuccess: (transactionId: string) => void;
