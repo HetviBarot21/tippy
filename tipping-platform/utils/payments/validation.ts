@@ -13,7 +13,7 @@ export interface TipValidationData {
   tipType: 'waiter' | 'restaurant';
   restaurantId: string;
   waiterId?: string;
-  tableId: string;
+  tableId?: string; // Optional since universal QR codes don't have table selection
   paymentMethod: 'card' | 'mpesa';
   customerPhone?: string;
 }
@@ -80,9 +80,10 @@ export class PaymentValidator {
       errors.push('Restaurant ID is required');
     }
 
-    if (!data.tableId) {
-      errors.push('Table ID is required');
-    }
+    // tableId is optional for universal QR codes
+    // if (!data.tableId) {
+    //   errors.push('Table ID is required');
+    // }
 
     if (!data.tipType || !['waiter', 'restaurant'].includes(data.tipType)) {
       errors.push('Valid tip type is required (waiter or restaurant)');

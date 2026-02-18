@@ -24,7 +24,7 @@ export interface CreateTipRequest {
   tipType: 'waiter' | 'restaurant';
   restaurantId: string;
   waiterId?: string;
-  tableId: string;
+  tableId?: string; // Optional for universal QR codes
   paymentMethod: PaymentMethod;
   customerPhone?: string;
 }
