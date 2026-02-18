@@ -24,7 +24,13 @@ export async function POST(request: NextRequest) {
     const { data: payouts, error: payoutsError } = await supabase
       .from('payouts')
       .select('id, restaurant_id, payout_type, status, recipient_account')
-      .in('id', payout_ids);
+      .in('id', payout_ids) as { data: Array<{
+        id: string;
+        restaurant_id: string;
+        payout_type: string;
+        status: string;
+        recipient_account: string | null;
+      }> | null; error: any };
 
     if (payoutsError || !payouts || payouts.length === 0) {
       return NextResponse.json(
@@ -34,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify all payouts belong to accessible restaurants
-    const restaurantIds = [...new Set(payouts.map(p => p.restaurant_id))];
+    const restaurantIds = Array.from(new Set(payouts.map(p => p.restaurant_id)));
     const { data: restaurants, error: restaurantsError } = await supabase
       .from('restaurants')
       .select('id')
@@ -119,7 +125,7 @@ export async function POST(request: NextRequest) {
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.errors },
+        { error: 'Invalid request data', details: error.issues },
         { status: 400 }
       );
     }
