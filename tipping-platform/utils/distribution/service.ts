@@ -20,13 +20,12 @@ export interface DistributionValidationResult {
 }
 
 export class DistributionService {
-  private supabase = createClient();
-
   /**
    * Get all distribution groups for a restaurant
    */
   async getDistributionGroups(restaurantId: string): Promise<DistributionGroup[]> {
-    const { data, error } = await this.supabase
+    const supabase = createClient();
+    const { data, error } = await supabase
       .from('distribution_groups')
       .select('*')
       .eq('restaurant_id', restaurantId)
@@ -69,8 +68,12 @@ export class DistributionService {
         errors.push(`Group ${index + 1}: Percentage cannot be negative`);
       } else if (group.percentage > 100) {
         errors.push(`Group ${index + 1}: Percentage cannot exceed 100%`);
-      } else if (group.percentage % 0.01 !== 0) {
-        errors.push(`Group ${index + 1}: Percentage can have at most 2 decimal places`);
+      } else {
+        // Check for at most 2 decimal places
+        const decimalPlaces = (group.percentage.toString().split('.')[1] || '').length;
+        if (decimalPlaces > 2) {
+          errors.push(`Group ${index + 1}: Percentage can have at most 2 decimal places`);
+        }
       }
 
       totalPercentage += group.percentage || 0;
@@ -103,41 +106,67 @@ export class DistributionService {
     restaurantId: string, 
     groups: DistributionGroupConfig[]
   ): Promise<DistributionGroup[]> {
-    // Validate groups first
-    const validation = this.validateDistributionGroups(groups);
-    if (!validation.isValid) {
-      throw new Error(`Validation failed: ${validation.errors.join('; ')}`);
+    try {
+      const supabase = createClient();
+      
+      console.log('=== Starting updateDistributionGroups ===');
+      console.log('Restaurant ID:', restaurantId);
+      console.log('Groups to validate:', JSON.stringify(groups, null, 2));
+
+      // Validate groups first
+      const validation = this.validateDistributionGroups(groups);
+      console.log('Validation result:', validation);
+      
+      if (!validation.isValid) {
+        const errorMsg = `Validation failed: ${validation.errors.join('; ')}`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      console.log('Validation passed, deleting existing groups...');
+
+      // Start transaction by deleting existing groups and inserting new ones
+      const { error: deleteError } = await supabase
+        .from('distribution_groups')
+        .delete()
+        .eq('restaurant_id', restaurantId);
+
+      if (deleteError) {
+        console.error('Error deleting existing distribution groups:', deleteError);
+        throw new Error(`Failed to delete existing groups: ${deleteError.message}`);
+      }
+
+      console.log('Existing groups deleted, inserting new groups...');
+
+      // Insert new groups
+      const insertData: DistributionGroupInsert[] = groups.map(group => ({
+        restaurant_id: restaurantId,
+        group_name: group.groupName.trim(),
+        percentage: group.percentage
+      }));
+
+      console.log('Insert data:', JSON.stringify(insertData, null, 2));
+
+      const { data, error: insertError } = await supabase
+        .from('distribution_groups')
+        .insert(insertData)
+        .select();
+
+      if (insertError) {
+        console.error('Error inserting distribution groups:', insertError);
+        console.error('Insert error details:', JSON.stringify(insertError, null, 2));
+        throw new Error(`Failed to create distribution groups: ${insertError.message}`);
+      }
+
+      console.log('Groups inserted successfully:', data);
+      console.log('=== updateDistributionGroups completed ===');
+
+      return data || [];
+    } catch (error) {
+      console.error('=== updateDistributionGroups failed ===');
+      console.error('Error:', error);
+      throw error;
     }
-
-    // Start transaction by deleting existing groups and inserting new ones
-    const { error: deleteError } = await this.supabase
-      .from('distribution_groups')
-      .delete()
-      .eq('restaurant_id', restaurantId);
-
-    if (deleteError) {
-      console.error('Error deleting existing distribution groups:', deleteError);
-      throw new Error('Failed to update distribution groups');
-    }
-
-    // Insert new groups
-    const insertData: DistributionGroupInsert[] = groups.map(group => ({
-      restaurant_id: restaurantId,
-      group_name: group.groupName.trim(),
-      percentage: group.percentage
-    }));
-
-    const { data, error: insertError } = await (this.supabase as any)
-      .from('distribution_groups')
-      .insert(insertData)
-      .select();
-
-    if (insertError) {
-      console.error('Error inserting distribution groups:', insertError);
-      throw new Error('Failed to create distribution groups');
-    }
-
-    return data || [];
   }
 
   /**
@@ -199,6 +228,8 @@ export class DistributionService {
    */
   async createTipDistribution(tipId: string, restaurantId: string, netAmount: number): Promise<TipDistribution[]> {
     try {
+      const supabase = createClient();
+      
       // Get distribution groups with their IDs
       const groups = await this.getDistributionGroups(restaurantId);
       
@@ -219,7 +250,7 @@ export class DistributionService {
         };
       });
 
-      const { data: tipDistributions, error } = await (this.supabase as any)
+      const { data: tipDistributions, error } = await supabase
         .from('tip_distributions')
         .insert(distributionInserts)
         .select();
@@ -244,7 +275,8 @@ export class DistributionService {
    * Get tip distributions for a specific tip
    */
   async getTipDistributions(tipId: string): Promise<TipDistribution[]> {
-    const { data, error } = await this.supabase
+    const supabase = createClient();
+    const { data, error } = await supabase
       .from('tip_distributions')
       .select('*')
       .eq('tip_id', tipId)
@@ -270,7 +302,8 @@ export class DistributionService {
     totalAmount: number;
     tipCount: number;
   }>> {
-    let query = this.supabase
+    const supabase = createClient();
+    let query = supabase
       .from('tip_distributions')
       .select(`
         group_name,
