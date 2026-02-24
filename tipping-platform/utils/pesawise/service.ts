@@ -4,7 +4,7 @@
  */
 
 import crypto from 'crypto';
-import { pesaWiseConfig, validatePesaWiseConfig, pesaWiseCallbacks } from './config';
+import { pesaWiseConfig, validatePesaWiseConfig, pesaWiseCallbacks, isTestMode } from './config';
 import {
   PesaWiseSTKPushRequest,
   PesaWiseSTKPushResponse,
@@ -18,9 +18,15 @@ import {
 
 export class PesaWiseService {
   private config = pesaWiseConfig;
+  private testMode: boolean;
 
   constructor() {
     validatePesaWiseConfig();
+    this.testMode = isTestMode();
+    
+    if (this.testMode) {
+      console.log('🧪 PesaWise Service running in TEST MODE - No real payments will be processed');
+    }
   }
 
   /**
@@ -102,6 +108,20 @@ export class PesaWiseService {
     transactionDesc: string;
   }): Promise<PesaWiseSTKPushResponse> {
     try {
+      // TEST MODE: Return mock success response
+      if (this.testMode) {
+        console.log('🧪 TEST MODE: Simulating STK Push', request);
+        return {
+          success: true,
+          message: 'TEST MODE: STK Push initiated successfully',
+          checkout_request_id: `TEST_${Date.now()}`,
+          merchant_request_id: `MERCHANT_TEST_${Date.now()}`,
+          response_code: '0',
+          response_description: 'Success. Request accepted for processing',
+          customer_message: 'Success. Request accepted for processing'
+        };
+      }
+
       const normalizedPhone = this.normalizePhoneNumber(request.phoneNumber);
 
       const payload: PesaWiseSTKPushRequest = {

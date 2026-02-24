@@ -148,8 +148,8 @@ export class PaymentService {
         transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`
       });
 
-      if (!stkPushResponse.success || !stkPushResponse.data) {
-        throw new Error(stkPushResponse.error || 'PesaWise STK Push failed');
+      if (!stkPushResponse.success) {
+        throw new Error(stkPushResponse.error || stkPushResponse.message || 'PesaWise STK Push failed');
       }
 
       console.log('PesaWise STK Push successful:', stkPushResponse);
@@ -160,11 +160,11 @@ export class PaymentService {
         .from('tips')
         .update({ 
           payment_status: 'processing',
-          transaction_id: stkPushResponse.data.checkout_request_id,
+          transaction_id: stkPushResponse.checkout_request_id || `TXN-${tip.id}`,
           customer_phone: normalizedPhone,
           metadata: {
-            merchantRequestId: stkPushResponse.data.merchant_request_id,
-            checkoutRequestId: stkPushResponse.data.checkout_request_id,
+            merchantRequestId: stkPushResponse.merchant_request_id,
+            checkoutRequestId: stkPushResponse.checkout_request_id,
             stkPushInitiated: new Date().toISOString(),
             provider: 'pesawise'
           }
@@ -179,8 +179,8 @@ export class PaymentService {
         success: true,
         tipId: tip.id,
         paymentMethod: 'mpesa',
-        message: stkPushResponse.data.customer_message || 'STK Push sent to your phone',
-        stkPushId: stkPushResponse.data.checkout_request_id
+        message: stkPushResponse.customer_message || stkPushResponse.message || 'STK Push sent to your phone',
+        stkPushId: stkPushResponse.checkout_request_id
       };
 
     } catch (error) {

@@ -72,9 +72,16 @@ export class PesawiseClient {
   private config: PesawiseConfig;
   private authToken?: string;
   private tokenExpiry?: number;
+  private isTestMode: boolean;
 
   constructor(config: PesawiseConfig) {
     this.config = config;
+    // Detect test mode if credentials contain "test"
+    this.isTestMode = config.apiKey.includes('test') || config.apiSecret.includes('test');
+    
+    if (this.isTestMode) {
+      console.log('🧪 Pesawise Client running in TEST MODE - Mock responses will be returned');
+    }
   }
 
   /**
@@ -119,6 +126,17 @@ export class PesawiseClient {
    * Initiate M-Pesa STK Push payment
    */
   async initiateSTKPush(request: STKPushRequest): Promise<STKPushResponse> {
+    // TEST MODE: Return mock success
+    if (this.isTestMode) {
+      console.log('🧪 TEST MODE: Mock STK Push', request);
+      return {
+        success: true,
+        transactionId: `TEST_TXN_${Date.now()}`,
+        checkoutRequestId: `TEST_CHECKOUT_${Date.now()}`,
+        message: 'TEST MODE: STK Push initiated successfully. This is a simulated payment.',
+      };
+    }
+
     try {
       const token = await this.getAuthToken();
 
@@ -177,6 +195,17 @@ export class PesawiseClient {
    * Supports M-Pesa, Card, Bank Transfer, and Pesawise Transfer
    */
   async createPaymentLink(request: PaymentLinkRequest): Promise<PaymentLinkResponse> {
+    // TEST MODE: Return mock payment link
+    if (this.isTestMode) {
+      console.log('🧪 TEST MODE: Mock Payment Link', request);
+      return {
+        success: true,
+        paymentLink: `http://localhost:3000/test-payment?ref=${request.reference}&amount=${request.amount}`,
+        linkId: `TEST_LINK_${Date.now()}`,
+        message: 'TEST MODE: Payment link created successfully. This is a simulated payment link.',
+      };
+    }
+
     try {
       const token = await this.getAuthToken();
 

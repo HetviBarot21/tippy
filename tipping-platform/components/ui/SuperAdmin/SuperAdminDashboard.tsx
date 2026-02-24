@@ -60,13 +60,13 @@ export function SuperAdminDashboard({
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="wallet">Wallet</TabsTrigger>
-          <TabsTrigger value="restaurants">Restaurants</TabsTrigger>
-          <TabsTrigger value="payouts">Payouts</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="support">Support</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-6 bg-gray-200">
+          <TabsTrigger value="overview" className="text-gray-900 data-[state=active]:bg-white data-[state=active]:text-black">Overview</TabsTrigger>
+          <TabsTrigger value="wallet" className="text-gray-900 data-[state=active]:bg-white data-[state=active]:text-black">Wallet</TabsTrigger>
+          <TabsTrigger value="restaurants" className="text-gray-900 data-[state=active]:bg-white data-[state=active]:text-black">Restaurants</TabsTrigger>
+          <TabsTrigger value="payouts" className="text-gray-900 data-[state=active]:bg-white data-[state=active]:text-black">Payouts</TabsTrigger>
+          <TabsTrigger value="analytics" className="text-gray-900 data-[state=active]:bg-white data-[state=active]:text-black">Analytics</TabsTrigger>
+          <TabsTrigger value="support" className="text-gray-900 data-[state=active]:bg-white data-[state=active]:text-black">Support</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">

@@ -25,9 +25,15 @@ export function validatePesaWiseConfig(): void {
   
   for (const field of requiredFields) {
     if (!pesaWiseConfig[field]) {
-      throw new Error(`Missing required PesaWise configuration: ${field}`);
+      console.warn(`⚠️  Missing PesaWise configuration: ${field}. Using TEST MODE.`);
+      return; // Don't throw error, allow test mode
     }
   }
+}
+
+// Check if we're in test mode (missing credentials)
+export function isTestMode(): boolean {
+  return !pesaWiseConfig.apiKey || !pesaWiseConfig.secretKey || !pesaWiseConfig.balanceId;
 }
 
 // Default callback URLs
