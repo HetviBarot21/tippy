@@ -3,7 +3,7 @@ import { Tables, TablesInsert } from '@/types_db';
 import { PaymentValidator, formatValidationErrors } from './validation';
 import { commissionService } from '@/utils/commission/service';
 
-type PaymentMethod = 'mpesa';
+type PaymentMethod = 'mpesa' | 'card';
 
 // Use service role client to bypass RLS for testing
 function createServiceClient() {
@@ -34,6 +34,8 @@ export interface PaymentResponse {
   tipId: string;
   paymentMethod: PaymentMethod;
   stkPushId?: string; // For M-Pesa payments
+  paymentLink?: string; // For Card payments (deprecated, use paymentUrl)
+  paymentUrl?: string; // For Card payments
   message?: string;
   error?: string;
 }
@@ -208,6 +210,99 @@ export class PaymentService {
   }
 
   /**
+   * Process Card payment using PesaWise payment link
+   */
+  private async processCardPayment(tip: Tables<'tips'>, request: CreateTipRequest): Promise<PaymentResponse> {
+    try {
+      console.log('Initiating Card payment via PesaWise:', {
+        tipId: tip.id,
+        amount: request.amount
+      });
+
+      // Use PesaWise to create payment link
+      const { pesaWiseService } = await import('@/utils/pesawise/service');
+      
+      const paymentLinkResponse = await pesaWiseService.createPaymentLink({
+        amount: request.amount,
+        accountReference: `TIP-${tip.id}`,
+        transactionDesc: `Tip payment for ${request.tipType === 'waiter' ? 'waiter' : 'restaurant'}`,
+        payeeName: 'Tippy Platform'
+      });
+
+      if (!paymentLinkResponse.success) {
+        throw new Error(paymentLinkResponse.error || paymentLinkResponse.message || 'PesaWise payment link creation failed');
+      }
+
+      console.log('PesaWise payment link created:', paymentLinkResponse);
+
+      // Check if this is test mode (payment link starts with TEST_MODE)
+      const isTestMode = paymentLinkResponse.payment_link?.startsWith('TEST_MODE');
+
+      // Update tip with payment link details
+      const supabase = this.getSupabase();
+      const { error } = await (supabase as any)
+        .from('tips')
+        .update({ 
+          payment_status: isTestMode ? 'completed' : 'processing', // Auto-complete in test mode
+          transaction_id: paymentLinkResponse.payment_link_id || `LINK-${tip.id}`,
+          metadata: {
+            paymentLink: paymentLinkResponse.payment_link,
+            paymentLinkId: paymentLinkResponse.payment_link_id,
+            linkCreated: new Date().toISOString(),
+            provider: 'pesawise',
+            testMode: isTestMode
+          }
+        })
+        .eq('id', tip.id);
+
+      if (error) {
+        console.error('Error updating tip for card payment:', error);
+      }
+
+      // In test mode, don't redirect - just show success
+      if (isTestMode) {
+        return {
+          success: true,
+          tipId: tip.id,
+          paymentMethod: 'mpesa',
+          message: '🧪 TEST MODE: Card payment completed successfully! (No real payment was processed)',
+          paymentUrl: undefined // Don't redirect in test mode
+        };
+      }
+
+      return {
+        success: true,
+        tipId: tip.id,
+        paymentMethod: 'mpesa', // PesaWise links support multiple methods including card
+        message: paymentLinkResponse.message || 'Payment link created. Redirecting...',
+        paymentUrl: paymentLinkResponse.payment_link // Frontend expects paymentUrl
+      };
+
+    } catch (error) {
+      console.error('Card payment error:', error);
+      
+      // Update tip status to failed
+      const supabase = this.getSupabase();
+      const { error: updateError } = await (supabase as any)
+        .from('tips')
+        .update({ 
+          payment_status: 'failed',
+          metadata: {
+            error: error instanceof Error ? error.message : 'Card payment failed',
+            failedAt: new Date().toISOString()
+          }
+        })
+        .eq('id', tip.id);
+
+      if (updateError) {
+        console.error('Error updating tip status to failed:', updateError);
+      }
+
+      throw new Error(error instanceof Error ? error.message : 'Card payment failed');
+    }
+  }
+
+  /**
    * Main method to create a tip and initiate payment
    */
   async createTipAndInitiatePayment(request: CreateTipRequest): Promise<PaymentResponse> {
@@ -221,11 +316,13 @@ export class PaymentService {
       // Create tip record
       const tip = await this.createTipRecord(request, commission);
 
-      // Process payment via M-Pesa (PesaWise)
+      // Process payment based on method
       if (request.paymentMethod === 'mpesa') {
         return await this.processMPesaPayment(tip, request);
+      } else if (request.paymentMethod === 'card') {
+        return await this.processCardPayment(tip, request);
       } else {
-        throw new Error('Invalid payment method. Only M-Pesa is supported.');
+        throw new Error('Invalid payment method. Only M-Pesa and Card are supported.');
       }
 
     } catch (error) {

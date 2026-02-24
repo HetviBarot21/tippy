@@ -149,6 +149,66 @@ export class PesaWiseService {
   }
 
   /**
+   * Create payment link for card/multiple payment methods
+   */
+  async createPaymentLink(request: {
+    amount: number;
+    accountReference: string;
+    transactionDesc: string;
+    payeeName: string;
+  }): Promise<{
+    success: boolean;
+    payment_link?: string;
+    payment_link_id?: string;
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      // TEST MODE: Return mock payment link
+      if (this.testMode) {
+        console.log('🧪 TEST MODE: Simulating Payment Link', request);
+        // In test mode, return a special URL that the frontend can detect
+        const testLink = `TEST_MODE_CARD_PAYMENT_${Date.now()}`;
+        return {
+          success: true,
+          payment_link: testLink,
+          payment_link_id: `TEST_LINK_${Date.now()}`,
+          message: 'TEST MODE: Card payment simulated successfully'
+        };
+      }
+
+      const payload = {
+        balanceId: this.config.balanceId,
+        amount: request.amount,
+        reference: request.accountReference,
+        description: request.transactionDesc,
+        payeeName: request.payeeName,
+        callbackUrl: pesaWiseCallbacks.callbackUrl
+      };
+
+      const response = await this.makeRequest<any>(
+        '/api/payment-links',
+        'POST',
+        payload
+      );
+
+      return {
+        success: true,
+        payment_link: response.payment_link || response.link,
+        payment_link_id: response.id || response.link_id,
+        message: 'Payment link created successfully'
+      };
+    } catch (error) {
+      console.error('Payment link creation failed:', error);
+      return {
+        success: false,
+        message: 'Failed to create payment link',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
+  /**
    * Query STK Push payment status
    */
   async querySTKPushStatus(checkoutRequestId: string): Promise<PesaWiseStatusQueryResponse> {
