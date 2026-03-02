@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Payout not found' }, { status: 404 });
     }
 
-    const payout = payouts[0];
+    const payout = payouts[0] as any; // Cast to any to avoid type issues with dynamic payout data
 
     // Determine status based on Paystack event
     const status = body.event === 'transfer.success' ? 'completed' : 'failed';
